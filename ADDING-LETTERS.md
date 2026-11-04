@@ -290,4 +290,9 @@ To support letters like Ŋ, Ɛ and Ɔ, the skill needs a font that has them. For
 
 - **The other 16 lowercase letters.** The letters that hang below the baseline (g, j, p, q, y) are the first real test of the space kept for them. f, j and r end in hooks whose end cuts must be named before tracing (see Test 3).
 - **Checked translations.** Seven languages have first-draft page text. A native speaker should check each before real use.
-- **Checked stroke directions for marks.** Ł's bar goes left to right, and É's accent and Ø's slash go from the top end down. These follow the manuscript rules (start at the top, bars go left to right) but haven't been checked against how each country teaches handwriting.
+- **Firmer sources for two stroke directions.** The marks follow published teaching guidance, but it is thin:
+  - **É (from the top down):** a French specialist teacher writes that both accents always start at the top and go down ([Alice Genestout](https://alicegenestout-orthopedagogue.fr/les-accents-grave-et-aigu-en-image/)). This is the best-supported of the three.
+  - **Ø (from the bottom end up, left to right):** the Danish method Rask håndskrivning draws all slanted lines left to right, except K, k and z ([Rask håndskrivning](https://www.xn--raskhndskrivning-hob.dk/for-de-mindste)). It's a general rule and doesn't mention Ø itself.
+  - **Ł (from the top end down):** Polish writing guides describe the slash drawn last, from the top downward. Their pages could only be read through search summaries.
+  
+  A teacher from each country should confirm.

@@ -765,28 +765,35 @@ def strokes_for(ch, glyph=None):
                                             g.to_edge(arm_r[0], out_r)])))
 
         if ch == "Ø":
-            # the slash, from its top end down to its bottom end. It is a
-            # steep band with level end cuts, so it is measured on rows, one
-            # in each end piece outside the ring, near the free end
+            # the slash, from its bottom end UP to its top end: Danish
+            # handwriting draws slanted lines left to right (Rask
+            # håndskrivning: "Alle skrå streger tegnes fra venstre mod
+            # højre", except K, k, z). It is a steep band with level end
+            # cuts, so it is measured on rows, one in each end piece outside
+            # the ring, near the free end
             low, high = marks[0], marks[-1]
             lx, ly, lw, lh = low["box"]
             hx, hy, hw, hh = high["box"]
             p = _mid_across(high["mask"], hy + 0.3 * hh, 0)
             q = _mid_across(low["mask"], ly + 0.7 * lh, 0)
-            strokes.append(_straight_mark(g, p, q, "top"))
+            strokes.append(_straight_mark(g, p, q, "left"))
 
         if ch == "Ł":
-            # the bar, left to right across the stem, like crossing a t. A
+            # the bar, from its top end DOWN across the stem: Polish writing
+            # guides describe the slash drawn last, from the top downward. A
             # shallow band with upright end cuts: measured on columns, one in
             # each piece either side of the stem
             left, right = marks[0], marks[-1]
             p = _mid_down(left["mask"], left["box"][0] + 0.5 * left["box"][2])
             q = _mid_down(right["mask"], right["box"][0] + 0.5 * right["box"][2])
-            strokes.append(_straight_mark(g, p, q, "left"))
+            strokes.append(_straight_mark(g, p, q, "top"))
 
         if ch == "É":
-            # the accent, from its top end down. A shallow band with upright
-            # end cuts: measured on columns
+            # the accent, from its top end down: French teaching says both
+            # accents start at the top ("on commence toujours le geste en
+            # partant du haut pour aller vers le bas", Alice Genestout,
+            # orthopédagogue). A shallow band with upright end cuts:
+            # measured on columns
             m = marks[0]
             x, y, w, h = m["box"]
             p, q = _mid_down(m["mask"], x + 0.25 * w), _mid_down(m["mask"], x + 0.75 * w)
