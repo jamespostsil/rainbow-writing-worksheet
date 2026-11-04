@@ -47,6 +47,14 @@ GUIDE = Color(0.55, 0.55, 0.60)
 WHITE = Color(1, 1, 1)
 
 CAP_RATIO = 0.702
+# Lowercase, as fractions of the em (Poppins Bold): the tall letters' top
+# (b, d, l), the x-height (top of x), room above for i's dot and below for
+# descenders (g, p, y).
+ASC_RATIO = 0.74
+XH_RATIO = 0.558
+LOWER_TOP = 0.801
+LOWER_BOTTOM = -0.275
+RULE = Color(0.72, 0.72, 0.76)
 
 HEADER_Y = H - 56
 INSTRUCTION_Y = H - 90
@@ -146,6 +154,18 @@ LETTERS = {
     "Ž": ("žirafa", 0x1F992, "preko, koso dolje, preko, pa kvačica", "hr"),    # giraffe
     "Ł": ("łódka", 0x26F5, "w dół, w prawo, potem kreska", "pl"),               # boat
     "É": ("étoile", 0x2B50, "en bas, trois traits, puis l'accent", "fr"),      # star
+    # Lowercase (English). Not in the default alphabet: ask for them with
+    # --letters (lowercase letters stay lowercase).
+    "a": ("apple", 0x1F34E, "circle back around, then down"),
+    "b": ("bear", 0x1F43B, "down, then circle forward"),
+    "c": ("cat", 0x1F431, "curve back around"),
+    "d": ("duck", 0x1F986, "circle back around, then tall down"),
+    "e": ("egg", 0x1F95A, "across, then circle back around"),
+    "i": ("inchworm", 0x1F41B, "down, then a dot"),
+    "l": ("lion", 0x1F981, "tall down"),
+    "n": ("nose", 0x1F443, "down, then over the hump and down"),
+    "o": ("octopus", 0x1F419, "circle all the way around"),
+    "t": ("turtle", 0x1F422, "down and curve, then across"),
 }
 
 
@@ -202,7 +222,14 @@ def draw_letter(c, ch):
     # keep the same height as every other letter.
     box_w, box_h = (W - 2 * LETTER_SIDE), (BOX_TOP - BOX_BOTTOM)
     by_width = box_w / (gx1 - gx0)
-    if gy0 < -0.02 or gy1 > CAP_RATIO + 0.03:
+    lower = ch.islower()
+    if lower:
+        # Every lowercase letter gets the SAME size and baseline, so x-height
+        # letters (a, e, o) are shorter than tall ones (b, d, l) as they are
+        # on ruled paper, with room kept for i's dot and for descenders.
+        size = box_h / (LOWER_TOP - LOWER_BOTTOM)
+        y = BOX_BOTTOM - LOWER_BOTTOM * size
+    elif gy0 < -0.02 or gy1 > CAP_RATIO + 0.03:
         size = min(by_width, box_h / (gy1 - gy0))
         y = BOX_BOTTOM + (box_h - (gy1 - gy0) * size) / 2 - gy0 * size
     else:
@@ -214,14 +241,26 @@ def draw_letter(c, ch):
     if x + gx0 * size < LETTER_SIDE or x + gx1 * size > W - LETTER_SIDE:
         x = W / 2 - (gx0 + gx1) / 2 * size   # centre the ink itself
 
+    if lower:
+        # handwriting guide lines: top line, dashed middle line, baseline.
+        # Drawn first; the letter is then filled white so the lines don't
+        # cross the dotted path inside it.
+        c.setStrokeColor(RULE)
+        c.setLineWidth(1.2)
+        for level, dash in ((ASC_RATIO, []), (XH_RATIO, [6, 5]), (0.0, [])):
+            c.setDash(dash, 0)
+            c.line(MARGIN - 20, y + level * size, W - MARGIN + 20, y + level * size)
+        c.setDash([], 0)
+
     c.setStrokeColor(LINE)
     c.setLineWidth(2.4)
     c.setLineJoin(1)
     c.setDash([], 0)
     tx = c.beginText(x, y)
     tx.setFont("Poppins-Bold", size)
-    tx.setTextRenderMode(1)
+    tx.setTextRenderMode(2 if lower else 1)    # 2: filled white, then outlined
     tx.setStrokeColor(LINE)
+    tx.setFillColor(WHITE)
     tx.textOut(ch)
     # Tr lives in the graphics state and survives ET, so hand it back before
     # closing or every later string on the page renders as an outline too.
@@ -646,7 +685,9 @@ def main():
                     help="heading for every page (default: 'Rainbow writing' in each page's language)")
     args = ap.parse_args()
 
-    asked = args.letters.upper()
+    # A lowercase letter with its own entry stays lowercase (a, b, c...);
+    # any other is read as its capital (ñ asks for Ñ).
+    asked = [ch if ch in LETTERS else ch.upper() for ch in args.letters]
     letters = [ch for ch in asked if ch in LETTERS]
     skipped = sorted(set(ch for ch in asked if ch not in LETTERS and not ch.isspace()))
     if skipped:
@@ -659,7 +700,9 @@ def main():
         c.showPage()
         status = "ok" if not issues else "; ".join(issues)
         problems += len(issues)
-        print(f"  {ch}: cap {CAP_RATIO * size / 72:.2f} in  {status}")
+        height = (f"x-height {XH_RATIO * size / 72:.2f} in" if ch.islower()
+                  else f"cap {CAP_RATIO * size / 72:.2f} in")
+        print(f"  {ch}: {height}  {status}")
     c.save()
     print(f"wrote {args.out}  ({problems} layout issue{'s' if problems != 1 else ''})")
 

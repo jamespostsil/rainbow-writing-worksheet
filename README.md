@@ -93,7 +93,7 @@ The script prints one line per page. Every line should say `ok`.
 
 ## Limits
 
-- **Capital letters only.** Lowercase letters are not built yet. They need their own stroke paths and a school-style font (single-story a and g).
+- **Ten lowercase letters so far:** a, b, c, d, e, i, l, o, t and n, with handwriting guide lines. Ask for them in lowercase: `--letters abcde`. The other 16 are not built yet.
 - **Many African letters are missing.** The Poppins font doesn't have letters like Ŋ, Ɛ and Ɔ. Supporting them means changing the font. See [ADDING-LETTERS.md](ADDING-LETTERS.md#using-another-font).
 - **Translations are first drafts.** The page text for the seven other languages needs a native speaker's check. To add a language, see [ADDING-LETTERS.md](ADDING-LETTERS.md#step-4-add-the-keyword-picture-and-cue).
 

@@ -128,6 +128,16 @@ The code then:
 
 **Use two centre points far apart,** not the mark's overall direction. Ø's ring cuts the slash into uneven pieces, which tilted the overall direction. Over the long slash, that small tilt walked the bottom end into a corner.
 
+### Lowercase letters
+
+Ten are built: **a b c d e i l o t n.** Their branches are in `_lowercase()` in `letterform.py`. Poppins's lowercase letters are already school-style (single-storey a and g, round letters made of a circle and a stick), so they use the same font.
+
+- **Order:** ball-and-stick print order. Where that order goes back over a stroke already drawn (a's stick runs back down the right side of its circle), the stroke stops where it meets the earlier one, so no dotted line runs on top of another.
+- **Bowls (a, b, d):** `_bowl_ring()` traces the middle of the ring and stops where it reaches the stem. Running the ends sideways to the stem's centre line, as B's bowls do, put a flat jog in a round bowl.
+- **Size:** every lowercase letter is the same size, on the same baseline, so short letters (a, e, o) sit lower than tall ones (b, d, l), as they do on ruled paper. Room is kept above for i's dot and below for g, p and y.
+- **Guide lines:** a top line, a dashed middle line and a baseline. They're drawn first, then the letter is filled white, so the lines don't cross the dotted path.
+- **Asking for them:** lowercase letters with their own table entry stay lowercase (`--letters abc`). Any other lowercase letter is read as its capital (`ñ` asks for `Ñ`).
+
 **Use a small `snap` for marks.** `ridge_route` first moves each waypoint to the thickest ink nearby. The default search radius is 5% of the cap height. Near the cedilla, the thickest ink nearby is the C itself, so the waypoint jumped into the C. The tilde and cedilla use `snap=0.01`.
 
 **The page sizes these letters for you.** A character that goes below the baseline or above the cap height is made smaller until the whole thing fits (Q, Ñ, Ç, Ü, Å, Ž, É). Other letters keep the full 6.19 inch cap height.
@@ -181,6 +191,14 @@ Render the page at 3x and crop each mark and each stroke end. For every end, ask
 Only after looking at it zoomed in. Give the reason, and a limit just above the measured value.
 
 **Never because a similar letter has the same flag.** Ž's caron was flagged 77% lopsided, and that was written off as "like V's sharp tip". It was a real bug: the line ran along the top edge of the caron.
+
+### Know what kind of end a stroke has before you change it
+
+Zoom in and name the end first: a **flat level cut** (top or bottom), an **upright cut** at the side, a **round end**, or a **junction** with another stroke. Then choose the finish (`"face-up"`/`"face-down"`, `"edge"`, or stop at the other stroke).
+
+e's tail is a lesson. It ends in a flat cut on top, facing up. It looked like the path stopped short, so it was pushed on to the side of the letter. That put the end in the outer corner, and the end check said 68%. The first version had been right (3%). Zoomed in, the flat top was obvious.
+
+**A check that doesn't work is worse than none.** To catch "stopped short", a check that measured across the stroke just before each end was tried. It flagged 17 correct ends next to junctions (the top of E's stem crosses the top arm) and still missed nothing real, so it was removed.
 
 ### What the checker can't judge
 
@@ -270,6 +288,6 @@ To support letters like Ŋ, Ɛ and Ɔ, the skill needs a font that has them. For
 
 ## Not built yet
 
-- **Lowercase.** It needs its own stroke branches, a school-style font, and sizing by x-height with room for ascenders and descenders.
+- **The other 16 lowercase letters.** The letters that hang below the baseline (g, j, p, q, y) are the first real test of the space kept for them. f, j and r end in hooks whose end cuts must be named before tracing (see Test 3).
 - **Checked translations.** Seven languages have first-draft page text. A native speaker should check each before real use.
 - **Checked stroke directions for marks.** Ł's bar goes left to right, and É's accent and Ø's slash go from the top end down. These follow the manuscript rules (start at the top, bars go left to right) but haven't been checked against how each country teaches handwriting.

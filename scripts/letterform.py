@@ -569,8 +569,136 @@ def _mid_across(mask, y, which):
     return ((s + e) / 2.0, float(y))
 
 
-def strokes_for(ch):
-    g = Glyph(ch)
+def _bowl_ring(g, stem_x_px, stem_side):
+    """Centre line of a lowercase bowl joined to a stem (a, d: stem on the
+    right; b: stem on the left), from the stem round to the stem.
+
+    The ring's centre line is the boundary of 'closer to the counter than to
+    the outside'. The part of that loop that runs inside the stem is dropped,
+    so the bowl stops where it reaches the stem. (Running both ends sideways
+    to the stem's centre line, as B's bowls do, put a flat jog in a round
+    bowl.)
+    It starts at the UPPER end: for a stem on the right that goes round to the
+    left (circle back, as a and d are written); for a stem on the left it goes
+    round to the right (circle forward, as b is written)."""
+    import cv2
+
+    def dist_to(region):
+        return cv2.distanceTransform(np.where(region, 0, 255).astype(np.uint8), cv2.DIST_L2, 5)
+
+    outside, counters = g.regions()
+    counter = counters[0]
+    nearer = (dist_to(counter) < dist_to(outside)).astype(np.uint8) * 255
+    cs, _ = cv2.findContours(nearer, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    loop = max(cs, key=cv2.contourArea)[:, 0, :].astype(float)
+    cols = np.nonzero(counter)[1]
+    if stem_side == "right":
+        keep = loop[:, 0] < cols.max() - 2
+    else:
+        keep = loop[:, 0] > cols.min() + 2
+    n = len(loop)
+    start = next(i for i in range(n) if keep[i] and not keep[i - 1])
+    run, i = [], start
+    while keep[i % n] and len(run) < n:
+        run.append(tuple(loop[i % n]))
+        i += 1
+    if run[0][1] > run[-1][1]:
+        run.reverse()
+    smooth = even_curve(run, min_gap=2.0, step=3.0, window=6)
+    return [(g.nx(x), g.ny(y)) for x, y in smooth]
+
+
+def _lowercase(g, ch):
+    """Strokes for lowercase letters, in ball-and-stick manuscript order.
+    Where the usual order goes back over a stroke already drawn (a's stick
+    runs back down the right side of its circle), each stroke here stops
+    where it meets the one before, so no dotted line runs over another."""
+    DOWN, LEFT, RIGHT = (0, 1), (-1, 0), (1, 0)
+
+    if ch in "ad":
+        # circle back from the stem, round to the stem; then the stick down
+        top, bot, sx = g.stem(-1, (0.05, 0.12) if ch == "a" else (0.08, 0.3))
+        return [("poly", _bowl_ring(g, sx, "right")), g.seg(top, bot)]
+
+    if ch == "b":
+        # the stick down; then circle forward from the stem round to the stem
+        top, bot, sx = g.stem(0, (0.08, 0.3))
+        return [g.seg(top, bot), ("poly", _bowl_ring(g, sx, "left"))]
+
+    if ch in "co":
+        return strokes_for(ch.upper(), glyph=g)
+
+    if ch == "e":
+        # across the bar from the left, then circle back up, over and round
+        # to the end of the curve at the lower right
+        # The ring is not an ellipse (an ellipse fit ran outside the ink near
+        # the tip), so it is traced along the middle of the real ink: from
+        # the bar's right end up over the top, down the left, round the
+        # bottom to the tip. The bar's left end is the middle of the left
+        # wall at the bar's height.
+        bar_px = sum(g.col_runs(0.5)[1]) / 2           # top of ring, BAR, bottom
+        bar_row = _runs(g.mask[int(round(bar_px))])[0]  # left edge to right edge
+        wall = g.row_runs(0.62)[0]                     # left wall, just below the bar
+        left = ((wall[0] + wall[1]) / 2.0, bar_px)
+        right = (float(bar_row[1]) - 0.12 * g.w, bar_px)
+        top = g.col_mid(0.5, 0)
+        side = g.run_mid(0.5, 0) if len(_runs(g.mask[int(round(g.t + 0.5 * g.h))])) > 1 \
+            else ((wall[0] + wall[1]) / 2.0, g.t + 0.62 * g.h)
+        bottom = g.col_mid(0.5, -1)
+        # The tail ends in a FLAT cut on top, facing up (look before guessing:
+        # it is not an upright cut at the side; aiming for the side put the
+        # end in the outer corner). So finish like S: land on the middle of
+        # that cut, arriving square to it.
+        tip = g.run_mid(0.7, -1)
+        # small snap: with the default, the bar's right end jumped up into
+        # the thick ink above it and the bar slanted uphill
+        ring = g.ridge_route(g.norm([right, top, side, bottom, tip]),
+                             head="none", tail="face-up", snap=0.01)
+        return [("poly", g.norm([left] + ring))]
+
+    if ch == "i":
+        import cv2
+        n, labels, stats, cents = cv2.connectedComponentsWithStats(g.mask.astype(np.uint8))
+        parts = sorted(range(1, n), key=lambda k: stats[k][1])     # top first
+        dot, stem = parts[0], parts[1]
+        x, y, w, h = (int(v) for v in stats[stem][:4])
+        mid = (x + w / 2.0, y + h / 2.0)
+        return [g.seg(g.to_edge(mid, (0, -1)), g.to_edge(mid, DOWN)),
+                ("dot", g.norm([tuple(cents[dot])])[0])]
+
+    if ch == "l":
+        top, bot, _ = g.stem(0, (0.3, 0.7))
+        return [g.seg(top, bot)]
+
+    if ch == "t":
+        # down the stem and round the foot to its end; then the cross bar,
+        # left to right
+        foot = _runs(g.mask[:, int(round(g.l + 0.85 * g.w))])[-1]
+        down = g.ridge_route([(g.nx(g.run_mid(0.1, 0)[0]), 0.9),
+                              (0.85, g.ny((foot[0] + foot[1]) / 2))])
+        b = g.col_mid(0.06, 0)
+        return [("poly", g.norm(down)),
+                g.seg(g.to_edge(b, LEFT), g.to_edge(b, RIGHT, 0.04 * g.w))]
+
+    if ch == "n":
+        # the stick down; then from the stick up, over the hump and down
+        top, bot, sx = g.stem(0, (0.6, 0.9))
+        stem_edge = float(_runs(g.mask[int(round(g.t + 0.75 * g.h))])[0][1])
+        arch_top = g.col_mid(0.62, 0)
+        leg = g.run_mid(0.85, -1)
+        start = (stem_edge + 2.0, g.t + 0.32 * g.h)
+        hump = g.ridge_route(g.norm([start, arch_top, leg]), head="none", snap=0.01)
+        return [g.seg(top, bot), ("poly", g.norm(hump))]
+
+    raise KeyError(ch)
+
+
+def strokes_for(ch, glyph=None):
+    """`glyph` lets a lowercase letter borrow an uppercase branch (c, o) while
+    measuring its own shape."""
+    g = glyph or Glyph(ch)
+    if glyph is None and ch.islower():
+        return _lowercase(g, ch)
 
     if ch in COMPOSED:
         base = Glyph(COMPOSED[ch])

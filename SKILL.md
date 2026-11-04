@@ -113,5 +113,6 @@ phrases are first drafts: say so when handing pages over.
   letter the font doesn't have; supporting one means changing the font,
   which means re-checking every letter (see ADDING-LETTERS.md).
 - On Windows set `PYTHONIOENCODING=utf-8`, or printing Ñ crashes the script.
-- Lowercase isn't built yet: it needs its own stroke branches and a
-  school-style font (single-story a/g, hooked t) rather than Poppins.
+- Lowercase: a b c d e i l o t n are built (`--letters abc` keeps them
+  lowercase), with top/dashed-middle/baseline guide lines and one shared
+  size. The rest are not built yet; see ADDING-LETTERS.md.

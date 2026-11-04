@@ -240,9 +240,9 @@ if __name__ == "__main__":
                     r = end_check(g, p, sw)
                     if r is None:
                         ends[k] = "-"        # ends inside the ink: not on a cut
-                    else:
-                        ends[k] = f"{r[0]:.0%}"
-                        measured[name] = round(r[0] * 100)
+                        continue
+                    ends[k] = f"{r[0]:.0%}"
+                    measured[name] = round(r[0] * 100)
             limits = {"outside": 0, "lopsided": 25, "doubles": 0, "start": 25, "end": 25}
             problems = [c for c, v in measured.items() if v > limits[c]]
             new = [c for c in problems if v_over(expected, ch, n, c, measured[c])]

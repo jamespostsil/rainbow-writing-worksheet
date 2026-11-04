@@ -25,3 +25,5 @@ W  1  doubles   3   the sharp points of the zigzag
 Ñ  4  lopsided  36  the tilde's curves change width; checked by eye at 3x zoom: the dots ride the middle
 Å  1  outside   1   Å's A is a pixel shorter at its peak than A, so the first point is on the edge
 Å  2  outside   1   as stroke 1
+a  2  lopsided  32  where the bowl joins the stem; the stem's line is straight down its middle (checked zoomed)
+d  2  lopsided  30  where the bowl joins the stem, as a
