@@ -103,6 +103,11 @@ LETTERS = {
     "X": ("Xylophone", "xylophone", "slant down, slant down"),
     "Y": ("Yo-yo", 0x1FA80, "slant in, slant in, down"),
     "Z": ("Zebra", 0x1F993, "across, slant down, across"),
+    # Letters with marks. Not in the default alphabet: ask for them with
+    # --letters. Keywords are in a language that uses the letter.
+    "Ñ": ("ñame", 0x1F360, "down, slant down, up, then the wave"),      # Spanish: yam
+    "Ç": ("çay", 0x2615,"curve all the way around, then the hook"),   # Turkish: tea
+    "Ü": ("üzüm", 0x1F347, "down, curve around, up, dot, dot"),         # Turkish: grapes
 }
 
 
@@ -144,14 +149,15 @@ def draw_header(c, title):
 # --------------------------------------------------------------------------
 def draw_letter(c, ch):
     """Giant hollow capital. Every letter gets the same cap height except one
-    that hangs below the baseline (Q's tail), which is sized so the whole
-    letter, tail included, fits the box."""
+    that reaches past it (Q's tail, Ç's cedilla below the baseline; Ñ's
+    tilde, Ü's dots above the cap height), which is sized so the whole
+    character fits the box."""
     gx0, gy0, gx1, gy1 = letter_bbox(ch)
     # Width only binds for W and M; let them use nearly the full page so they
     # keep the same height as every other letter.
     box_w, box_h = (W - 2 * LETTER_SIDE), (BOX_TOP - BOX_BOTTOM)
     by_width = box_w / (gx1 - gx0)
-    if gy0 < -0.02:
+    if gy0 < -0.02 or gy1 > CAP_RATIO + 0.03:
         size = min(by_width, box_h / (gy1 - gy0))
         y = BOX_BOTTOM + (box_h - (gy1 - gy0) * size) / 2 - gy0 * size
     else:
@@ -187,6 +193,8 @@ def stroke_points(kind, data, ox, oy, iw, ih, n=90):
         return [(ox + a * iw, oy + b * ih), (ox + cc * iw, oy + d * ih)]
     if kind == "poly":
         return [(ox + px * iw, oy + py * ih) for px, py in data]
+    if kind == "dot":
+        return [(ox + data[0] * iw, oy + data[1] * ih)]
     cx, cy, rx, ry, a0, a1 = data
     return [(ox + (cx + rx * math.cos(math.radians(a))) * iw,
              oy + (cy + ry * math.sin(math.radians(a))) * ih)
@@ -227,6 +235,10 @@ def draw_strokes(c, ch, x, y, size):
     strokes = []
     for n, (kind, data) in enumerate(strokes_for(ch), start=1):
         pts = stroke_points(kind, data, ox, oy, iw, ih)
+        if kind == "dot":
+            # a dot is one tap: its numbered badge sits on it, no line or arrow
+            strokes.append({"n": n, "pts": pts, "arrow": []})
+            continue
         # Aim along the stroke's last few points of LENGTH, not its last few
         # points by count: M, V and W are zigzags stored as 3-5 corners, where
         # "three points back" is the far side of the letter.
@@ -257,6 +269,8 @@ def draw_strokes(c, ch, x, y, size):
 
     for s in strokes:
         pts = s["pts"]
+        if not s["arrow"]:
+            continue          # a dot: nothing to draw but its badge
         c.setStrokeColor(GUIDE)
         c.setLineWidth(3.0)
         c.setLineCap(1)
@@ -511,6 +525,8 @@ def check_page(ch, strokes, letter_ink, letter_hit, cap, pic_ink, caption, rain,
             issues.append(f"badge {s['n']} rises into the instructions")
     # every arrowhead must point along the end of its own stroke
     for s in strokes:
+        if not s["arrow"]:
+            continue          # a dot has no arrow
         (tx, ty), (bx0, by0) = s["pts"][-1], point_back(s["pts"], 4.0)
         tip, b1, b2 = s["arrow"]
         base = ((b1[0] + b2[0]) / 2, (b1[1] + b2[1]) / 2)
@@ -522,6 +538,8 @@ def check_page(ch, strokes, letter_ink, letter_hit, cap, pic_ink, caption, rain,
     # arrowheads that land on top of each other
     for i, s in enumerate(strokes):
         for t in strokes[i + 1:]:
+            if not s["arrow"] or not t["arrow"]:
+                continue
             if math.hypot(s["arrow"][0][0] - t["arrow"][0][0],
                           s["arrow"][0][1] - t["arrow"][0][1]) < 6:
                 issues.append(f"arrows {s['n']} and {t['n']} end on the same spot")
@@ -574,7 +592,11 @@ def main():
     ap.add_argument("--title", default="Rainbow writing")
     args = ap.parse_args()
 
-    letters = [ch for ch in args.letters.upper() if ch in LETTERS]
+    asked = args.letters.upper()
+    letters = [ch for ch in asked if ch in LETTERS]
+    skipped = sorted(set(ch for ch in asked if ch not in LETTERS and not ch.isspace()))
+    if skipped:
+        print(f"  skipped (not in the LETTERS table): {' '.join(skipped)}")
     c = canvas.Canvas(args.out, pagesize=LETTER)
     c.setTitle(args.title)
     problems = 0

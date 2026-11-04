@@ -12,7 +12,7 @@ Each page is 8.5x11 and has:
 - **A friendly line-art picture** with a caption, for example "A is for Apple".
 - **A name line** and page numbers ("1 of 3").
 
-The skill makes the whole alphabet or just the letters you ask for, and saves them as one PDF.
+The skill makes the whole alphabet or just the letters you ask for, and saves them as one PDF. Besides A to Z, it can make **Ñ, Ç and Ü**. To add more letters, see **[ADDING-LETTERS.md](ADDING-LETTERS.md)**.
 
 ## Install
 
@@ -55,7 +55,7 @@ To run the script yourself, without Claude:
 python scripts/make_rainbow.py --letters ABCDE --out rainbow-writing.pdf
 ```
 
-- **--letters:** the letters to make. The default is the whole alphabet.
+- **--letters:** the letters to make. The default is A to Z. Add Ñ, Ç or Ü by name, for example `--letters "ABCÑ"`.
 - **--title:** changes the heading on each page.
 
 The script prints one line per page. Every line should say `ok`.
@@ -63,6 +63,7 @@ The script prints one line per page. Every line should say `ok`.
 ## What's in the repo
 
 - **SKILL.md:** the instructions Claude follows, including the quality rules for every page.
+- **ADDING-LETTERS.md:** how to add a letter: the measuring toolkit, letters with marks, how to read the checker, and the traps we hit.
 - **scripts/make_rainbow.py:** makes the PDF. The words, pictures, and "Say it" cues for each letter are in the `LETTERS` table at the top of this file.
 - **scripts/letterform.py:** works out where the dotted guides go by measuring the real letter shapes in the font.
 - **scripts/verify.py:** checks that every dotted guide stays in the middle of its stroke, and writes overlay images to review.
@@ -72,7 +73,8 @@ The script prints one line per page. Every line should say `ok`.
 ## Limits
 
 - **Capital letters only.** Lowercase letters are not built yet. They need their own stroke paths and a school-style font (single-story a and g).
-- **English keywords.** To use another language, change the words and cues in the `LETTERS` table. Then check that each picture still fits the new word.
+- **Many African letters are missing.** The Poppins font doesn't have letters like Ŋ, Ɛ and Ɔ. Supporting them means changing the font. See [ADDING-LETTERS.md](ADDING-LETTERS.md#using-another-font).
+- **English page text.** The keywords can be in any language. The instructions, "Say it" cues and "is for" in the caption are in English.
 
 ## Licences
 

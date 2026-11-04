@@ -75,8 +75,12 @@ floor, not the review. Do both:
 - **Text is normal weight.** The hollow letter uses PDF text render mode 1;
   it is reset inside that same text object, or every later string on the
   page comes out outlined.
-- **Letters share one cap height**, except Q (tail below the baseline) and W
-  (too wide), which are shrunk only as far as they must be.
+- **Letters share one cap height**, except Q (tail below the baseline), W
+  (too wide), and letters with marks (Ñ, Ç, Ü), which are shrunk only as far
+  as they must be.
+- **Marks are their own strokes, after the base letter**: Ñ's tilde left to
+  right, Ç's hook from where it leaves the C, Ü's dots as numbered taps with
+  no arrow ("dot" strokes).
 
 ## Changing things
 
@@ -88,5 +92,14 @@ floor, not the review. Do both:
 - Stroke paths live in `strokes_for()` in `letterform.py`, one branch per
   letter. After changing one, run `verify.py` for that letter and look at the
   overlay.
+- **To add a letter, follow `ADDING-LETTERS.md`** (in this folder): the
+  toolkit, letters with marks, how to read the checker, and the traps.
+- Besides A-Z, the table has Ñ, Ç and Ü. They are not in the default
+  alphabet: pass them in `--letters`. Letters not in the table are skipped,
+  and the script prints which.
+- Poppins lacks many African letters (Ŋ, Ɛ, Ɔ, Ɓ, Ɗ...). `Glyph()` refuses a
+  letter the font doesn't have; supporting one means changing the font,
+  which means re-checking every letter (see ADDING-LETTERS.md).
+- On Windows set `PYTHONIOENCODING=utf-8`, or printing Ñ crashes the script.
 - Lowercase isn't built yet: it needs its own stroke branches and a
   school-style font (single-story a/g, hooked t) rather than Poppins.

@@ -21,6 +21,8 @@ def to_px(g, kind, data, n=120):
         pts = [(a + (c - a) * i / n, b + (d - b) * i / n) for i in range(n + 1)]
     elif kind == "poly":
         pts = data
+    elif kind == "dot":
+        pts = [data]
     else:
         cx, cy, rx, ry, a0, a1 = data
         pts = [(cx + rx * math.cos(math.radians(a0 + (a1 - a0) * i / n)),
@@ -52,6 +54,8 @@ def reach(g, x, y, dx, dy, cap):
 
 def check_stroke(g, pts, skip=0.10):
     """Returns (outside_count, worst_asym, worst_at, reversals)."""
+    if len(pts) == 1:   # a dot: it only has to sit on its ink
+        return (0 if g.inside(*pts[0]) else 1), 0.0, None, 0
     pts = resample(pts)
     n = len(pts)
     outside = sum(1 for x, y in pts if not g.inside(x, y))
@@ -59,7 +63,7 @@ def check_stroke(g, pts, skip=0.10):
     for (a, b), (c, d), (e, f) in zip(pts, pts[1:], pts[2:]):
         if (c - a) * (e - c) + (d - b) * (f - d) < 0:
             rev += 1
-    cap = 0.35 * g.h
+    cap = 0.35 * g.cap_px   # not g.h: a mark (Ñ's tilde) makes g.h taller
     samples = []
     for i in range(2, n - 2):
         if i < n * skip or i > n * (1 - skip):
@@ -105,6 +109,11 @@ def sheet(letters, path, cols=6, tile=300):
         img.paste(grey, (gx, gy), gi)
         for n, (kind, data) in enumerate(strokes_for(ch), 1):
             p = [(gx + (x - g.l) * s, gy + (y - g.t) * s) for x, y in to_px(g, kind, data)]
+            if kind == "dot":
+                bx, by = p[0]
+                d.ellipse([bx - 11, by - 11, bx + 11, by + 11], fill=(20, 90, 200))
+                d.text((bx, by), str(n), fill="white", font=lab, anchor="mm")
+                continue
             d.line(p, fill=(200, 30, 30), width=3)
             (x1, y1) = p[-1]
             back, j = 0.0, len(p) - 1          # aim by length, not by count

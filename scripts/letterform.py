@@ -8,7 +8,11 @@ so arcs carry separate rx/ry.
 Stroke forms:
   ("line", (x0, y0, x1, y1))
   ("arc",  (cx, cy, rx, ry, start_deg, end_deg))
+  ("poly", [(x, y), ...])
+  ("dot",  (x, y))          a dot the child makes (Ü's two dots): no arrow
 Angles are standard math convention; the sweep runs start -> end.
+The box is the ink of the WHOLE character, marks included: Ñ's tilde and
+Ç's cedilla make its box taller than N's or C's.
 """
 
 import math
@@ -66,8 +70,23 @@ def even_curve(path, min_gap=5.0, step=3.0, window=7):
     return out
 
 
+_CMAP = None
+
+
+def in_font(ch):
+    global _CMAP
+    if _CMAP is None:
+        from fontTools.ttLib import TTFont
+        _CMAP = TTFont(FONT_PATH).getBestCmap()
+    return ord(ch) in _CMAP
+
+
 class Glyph:
     def __init__(self, ch):
+        # A missing character still renders: as the font's empty "missing
+        # glyph" box, which would be measured as if it were the letter.
+        if not in_font(ch):
+            raise ValueError(f"{ch!r} (U+{ord(ch):04X}) is not in {os.path.basename(FONT_PATH)}")
         font = ImageFont.truetype(FONT_PATH, RENDER_PX)
         img = Image.new("L", (RENDER_PX * 2, RENDER_PX * 2), 0)
         ImageDraw.Draw(img).text((RENDER_PX // 2, RENDER_PX // 2), ch, font=font, fill=255)
@@ -75,6 +94,15 @@ class Glyph:
         ys, xs = np.nonzero(self.mask)
         self.l, self.t, self.r, self.b = xs.min(), ys.min(), xs.max(), ys.max()
         self.w, self.h = self.r - self.l, self.b - self.t
+
+    @property
+    def cap_px(self):
+        """Cap height in pixels (the ink height of H). Use this, not self.h,
+        for any 'how far is near' distance: a mark (Ñ's tilde) makes self.h
+        taller without making the strokes any thicker."""
+        if not hasattr(Glyph, "_cap_px"):
+            Glyph._cap_px = Glyph("H").h
+        return Glyph._cap_px
 
     def nx(self, px):
         return float((px - self.l) / self.w)
@@ -263,10 +291,14 @@ class Glyph:
         iy, ix = np.unravel_index(np.argmax(win), win.shape)
         return (float(x - r + ix), float(y - r + iy))
 
-    def ridge_route(self, waypoints, head="edge", tail="edge"):
+    def ridge_route(self, waypoints, head="edge", tail="edge", snap=0.05):
         """Curved stroke through normalized waypoints, riding the middle of
         the ink: a least-cost path where cost falls off steeply with
         distance from the edge, so it hugs the ridge.
+
+        Each waypoint first snaps to the thickest ink within `snap` x cap
+        height. For a small mark next to a thick stroke (Ç's cedilla under
+        the C) use a small snap, or the waypoint jumps into the big stroke.
 
         Each end is then finished one of three ways:
           "edge" - run straight out along the tangent to the ink's edge
@@ -283,7 +315,7 @@ class Glyph:
         cost = np.where(sub > 0, 1.0 / (sub + 1.0) ** 2, 1e3)
 
         pts = [(self.l + nx * self.w, self.b - ny * self.h) for nx, ny in waypoints]
-        pts = [self.ridge_snap(p, 0.05 * self.h) for p in pts]
+        pts = [self.ridge_snap(p, max(2, snap * self.cap_px)) for p in pts]
         path = []
         for a, b in zip(pts, pts[1:]):
             seg, _ = route_through_array(
@@ -404,6 +436,23 @@ class Glyph:
         counters.sort(key=lambda m: np.nonzero(m)[0].mean())
         return outside, counters
 
+    def marks(self, base):
+        """The parts of this character that its base letter doesn't have
+        (Ñ's tilde, Ç's cedilla, Ü's dots), left to right. Specks where the
+        base is drawn a pixel differently inside the composed character are
+        dropped."""
+        import cv2
+        extra = (self.mask & ~base.mask).astype(np.uint8)
+        n, labels, stats, cents = cv2.connectedComponentsWithStats(extra)
+        biggest = max(stats[i][4] for i in range(1, n))
+        out = []
+        for i in range(1, n):
+            x, y, w, h, area = (int(v) for v in stats[i])
+            if area >= 0.05 * biggest:
+                out.append({"mask": labels == i, "box": (x, y, w, h),
+                            "centre": (float(cents[i][0]), float(cents[i][1]))})
+        return sorted(out, key=lambda m: m["box"][0])
+
     def medial_bowl(self, own, stem_x_px, lane_frac=0.30):
         """Centreline of the bowl around counter `own`, as the boundary of
         'closer to this counter than to anything else'.
@@ -446,8 +495,74 @@ class Glyph:
         return [(self.nx(x), self.ny(y)) for x, y in full]
 
 
+def rebase(strokes, src, dst):
+    """Move strokes measured on one glyph (N) into another glyph's box (Ñ).
+    Both are rendered at the same origin, so pixels line up; only the
+    normalizing box differs."""
+    def p(nx, ny):
+        return dst.nx(src.l + nx * src.w), dst.ny(src.b - ny * src.h)
+    out = []
+    for kind, data in strokes:
+        if kind == "line":
+            out.append(("line", p(*data[:2]) + p(*data[2:])))
+        elif kind == "poly":
+            out.append(("poly", [p(*q) for q in data]))
+        elif kind == "dot":
+            out.append(("dot", p(*data)))
+        else:
+            cx, cy, rx, ry, a0, a1 = data
+            out.append(("arc", p(cx, cy) + (rx * src.w / dst.w, ry * src.h / dst.h, a0, a1)))
+    return out
+
+
+# A letter with a mark: the base letter's strokes first, then the mark's.
+COMPOSED = {"Ñ": "N", "Ç": "C", "Ü": "U"}
+
+
+def _mid_down(mask, x):
+    """Middle of the ink a column crosses, inside one mark's mask."""
+    rows = np.nonzero(mask[:, int(round(x))])[0]
+    return (float(x), (rows.min() + rows.max()) / 2.0)
+
+
+def _mid_across(mask, y, which):
+    runs = _runs(mask[int(round(y))])
+    s, e = runs[which]
+    return ((s + e) / 2.0, float(y))
+
+
 def strokes_for(ch):
     g = Glyph(ch)
+
+    if ch in COMPOSED:
+        base = Glyph(COMPOSED[ch])
+        strokes = rebase(strokes_for(COMPOSED[ch]), base, g)
+        marks = g.marks(base)
+
+        if ch == "Ñ":
+            # the tilde, left to right, along the middle of its wave
+            m = marks[0]
+            x, y, w, h = m["box"]
+            a, b = _mid_down(m["mask"], x + 0.12 * w), _mid_down(m["mask"], x + 0.88 * w)
+            strokes.append(("poly", g.norm(g.ridge_route(g.norm([a, b]), snap=0.01))))
+
+        if ch == "Ç":
+            # the cedilla hangs from the bottom of the C by a short neck:
+            # start where the neck leaves the C, go down and round the hook,
+            # end on the hook's flat end at the lower left
+            m = max(marks, key=lambda k: k["box"][2] * k["box"][3])
+            x, y, w, h = m["box"]
+            neck = _mid_across(m["mask"], y + 0.08 * h, 0)
+            bowl = _mid_across(m["mask"], y + 0.55 * h, -1)
+            foot = _mid_down(m["mask"], x + 0.18 * w)
+            hook = g.ridge_route(g.norm([neck, bowl, foot]), head="none", snap=0.01)
+            strokes.append(("poly", g.norm([(neck[0], float(y + 1))] + hook)))
+
+        if ch == "Ü":
+            # dots: one tap each, left then right
+            for m in marks:
+                strokes.append(("dot", g.norm([m["centre"]])[0]))
+        return strokes
 
     if ch == "A":
         apex = g.nx(sum(g.row_runs(0.02)[0]) / 2)
