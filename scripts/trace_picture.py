@@ -1,7 +1,7 @@
 """Turn a black-and-white line drawing (PNG) into vector lines for a page
 picture, so it prints in the same line style as the OpenMoji pictures.
 
-    python scripts/trace_picture.py assets/pictures/sweet-potato-canva.png assets/pictures/sweet-potato.json
+    python scripts/trace_picture.py assets/pictures/sweet-potato-cut-canva.png assets/pictures/sweet-potato-cut.json
 
 Pasting the picture in as an image doesn't work: at its printed size (about
 124 pt wide) the drawing's thin lines nearly disappear. Instead:
