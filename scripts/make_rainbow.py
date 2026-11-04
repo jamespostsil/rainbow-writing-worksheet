@@ -467,87 +467,46 @@ def draw_cloud(c, x, y_base, w):
     return (left - lw, y_base - lw, right + lw, top + lw)
 
 
-def draw_sweet_potato(c, cx, cy):
-    """Sweet potato (ñame) in the OpenMoji line style, whole, with a round
-    slice in front. OpenMoji's own read as a leaf (thin, pointed, symmetric,
-    dots like veins); a short, plump version with rings read as a croissant
-    or a caterpillar. What reads as a sweet potato: LONG (about three times
-    as long as wide), a gentle bend, a lumpy outline narrowing into thin
-    wavy root tails, a few short creases, and a cut slice showing its
-    inside, which says "vegetable"."""
-    lw = 3.0
+PICTURES = os.path.join(os.path.dirname(FONTS), "pictures")
+
+
+def draw_traced(c, cx, cy, name, mark_width=1.8):
+    """A picture traced from a line drawing by scripts/trace_picture.py
+    (assets/pictures/<name>.json): its outline at the OpenMoji pictures'
+    line weight, the marks inside it thinner."""
+    import json
+    with open(os.path.join(PICTURES, name + ".json"), encoding="utf-8") as f:
+        data = json.load(f)
+    w = min(PIC_MAX_W, PIC_MAX_H * data["aspect"])
+    h = w / data["aspect"]
+    x0, y0 = cx - w / 2, cy - h / 2
+
+    def path(points, closed, width):
+        c.setLineWidth(width)
+        p = c.beginPath()
+        p.moveTo(x0 + points[0][0] * w, y0 + points[0][1] * h)
+        for px, py in points[1:]:
+            p.lineTo(x0 + px * w, y0 + py * h)
+        if closed:
+            p.close()
+        c.drawPath(p, stroke=1, fill=0)
+
     c.setStrokeColor(LINE)
     c.setLineCap(1)
     c.setLineJoin(1)
     c.setDash([], 0)
-    half_len, fat, arch, tilt = 50.0, 17.0, 7.0, math.radians(18)
-    ox, oy = cx + 6, cy + 14                     # the whole one, up and right
+    path(data["outline"], True, 3.0)
+    for m in data["marks"]:
+        path(m, False, mark_width)
+    return (x0 - 1.5, y0 - 1.5, x0 + w + 1.5, y0 + h + 1.5)
 
-    def turn(x, y):
-        return (ox + x * math.cos(tilt) - y * math.sin(tilt),
-                oy + x * math.sin(tilt) + y * math.cos(tilt))
 
-    def spine(s):
-        return (half_len * s, arch * (1 - s * s))
-
-    def normal(s):
-        dx, dy = half_len, -2 * arch * s
-        m = math.hypot(dx, dy)
-        return (-dy / m, dx / m)
-
-    def width(s):
-        u = (s + 1) / 2
-        return fat * (math.sin(math.pi * u) ** 0.75) * (1.0 + 0.15 * (u - 0.5))
-
-    def edge(s, side, lump=True):
-        (x, y), (nx, ny) = spine(s), normal(s)
-        w = width(s) * ((1 + 0.06 * math.sin(8 * s + side) + 0.03 * math.sin(15 * s)) if lump else 1)
-        return turn(x + side * nx * w, y + side * ny * w)
-
-    def polyline(points, width_pt):
-        c.setLineWidth(width_pt)
-        q = c.beginPath()
-        q.moveTo(*points[0])
-        for r in points[1:]:
-            q.lineTo(*r)
-        c.drawPath(q, stroke=1, fill=0)
-
-    ss = np.linspace(-0.98, 0.98, 80)
-    outline = [edge(s, 1) for s in ss] + [edge(s, -1) for s in ss[::-1]]
-    p = c.beginPath()
-    p.moveTo(*outline[0])
-    for q in outline[1:]:
-        p.lineTo(*q)
-    p.close()
-    c.setLineWidth(lw)
-    c.setFillColor(WHITE)
-    c.drawPath(p, stroke=1, fill=1)
-
-    # a few short creases on the skin, from the top edge part way down
-    for s0 in (-0.45, 0.0, 0.42):
-        crease = []
-        for k in np.linspace(0.75, 0.15, 6):
-            (x, y), (nx, ny) = spine(s0 + 0.06 * (1 - k)), normal(s0)
-            crease.append(turn(x + nx * width(s0) * k, y + ny * width(s0) * k))
-        polyline(crease, 2.0)
-
-    # thin wavy root tails at both ends
-    for sign in (1, -1):
-        x0, y0 = spine(sign * 0.98)
-        polyline([turn(x0 + sign * 2.3 * k, y0 - 0.4 * k + 1.5 * math.sin(1.5 * k))
-                  for k in np.linspace(0, 6, 12)], 2.0)
-
-    # a round slice in front, lower left: skin ring and the flesh inside
-    sx, sy, r = cx - 30, cy - 22, 17.0
-    c.setLineWidth(lw)
-    c.setFillColor(WHITE)
-    c.ellipse(sx - r, sy - r * 0.92, sx + r, sy + r * 0.92, stroke=1, fill=1)
-    c.setLineWidth(1.8)
-    c.ellipse(sx - r * 0.68, sy - r * 0.62, sx + r * 0.68, sy + r * 0.62, stroke=1, fill=0)
-
-    xs = [q[0] for q in outline] + [sx - r]
-    ys = [q[1] for q in outline] + [sy - r]
-    return (min(xs) - 4, min(ys) - lw, max(xs) + 16, max(ys) + lw)
+def draw_sweet_potato(c, cx, cy):
+    """Sweet potato (ñame), traced from a Canva drawing made with the
+    family's nonprofit Canva account (assets/pictures/sweet-potato-canva.png).
+    OpenMoji's own read as a leaf, and two drawn in code read as a pea pod
+    and a croissant."""
+    return draw_traced(c, cx, cy, "sweet-potato")
 
 
 DRAWINGS = {}       # picture name -> drawing function; filled in below
