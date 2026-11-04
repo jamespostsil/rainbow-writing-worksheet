@@ -12,7 +12,28 @@ Each page is 8.5x11 and has:
 - **A friendly line-art picture** with a caption, for example "A is for Apple".
 - **A name line** and page numbers ("1 of 3").
 
-The skill makes the whole alphabet or just the letters you ask for, and saves them as one PDF. Besides A to Z, it can make **Ñ, Ç and Ü**. To add more letters, see **[ADDING-LETTERS.md](ADDING-LETTERS.md)**.
+The skill makes the whole alphabet or just the letters you ask for, and saves them as one PDF.
+
+## Letters from other languages
+
+Besides A to Z, the skill can make **Ñ, Ç, Ü, Å, Ø, Ž, Ł and É**. Each mark (tilde, cedilla, dots, ring, slash, caron, bar, accent) gets its own numbered stroke after the letter. **Every word on these pages is in a language that uses the letter:** the title, "Name", the instructions, the "Say it" cue, the caption and the page number.
+
+<img src="docs/example-n-tilde-spanish.png" alt="Spanish page: Ñ with the tilde as stroke 4, captioned Ñ de ñame" width="300"> <img src="docs/example-c-cedilla-turkish.png" alt="Turkish page: Ç with the cedilla hook as stroke 2, captioned Ç harfi: çay" width="300">
+
+| Letter | Page language | Word |
+|---|---|---|
+| Ñ | Spanish | ñame (yam) |
+| Ç | Turkish | çay (tea) |
+| Ü | Turkish | üzüm (grapes) |
+| Å | Swedish | åsna (donkey) |
+| Ø | Danish | øre (ear) |
+| Ž | Croatian | žirafa (giraffe) |
+| Ł | Polish | łódka (boat) |
+| É | French | étoile (star) |
+
+**Please check before real use:** the non-English page text is a first draft and needs a native speaker's check.
+
+To add more letters, see **[ADDING-LETTERS.md](ADDING-LETTERS.md)**.
 
 ## Install
 
@@ -55,8 +76,8 @@ To run the script yourself, without Claude:
 python scripts/make_rainbow.py --letters ABCDE --out rainbow-writing.pdf
 ```
 
-- **--letters:** the letters to make. The default is A to Z. Add Ñ, Ç or Ü by name, for example `--letters "ABCÑ"`.
-- **--title:** changes the heading on each page.
+- **--letters:** the letters to make. The default is A to Z. Ask for the other letters by name, for example `--letters "ÑÇÜÅØŽŁÉ"`.
+- **--title:** replaces the heading on every page. By default it is "Rainbow writing" in each page's language.
 
 The script prints one line per page. Every line should say `ok`.
 
@@ -74,7 +95,7 @@ The script prints one line per page. Every line should say `ok`.
 
 - **Capital letters only.** Lowercase letters are not built yet. They need their own stroke paths and a school-style font (single-story a and g).
 - **Many African letters are missing.** The Poppins font doesn't have letters like Ŋ, Ɛ and Ɔ. Supporting them means changing the font. See [ADDING-LETTERS.md](ADDING-LETTERS.md#using-another-font).
-- **English page text.** The keywords can be in any language. The instructions, "Say it" cues and "is for" in the caption are in English.
+- **Translations are first drafts.** The page text for the seven other languages needs a native speaker's check. To add a language, see [ADDING-LETTERS.md](ADDING-LETTERS.md#step-4-add-the-keyword-picture-and-cue).
 
 ## Licences
 

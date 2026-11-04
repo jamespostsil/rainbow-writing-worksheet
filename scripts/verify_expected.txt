@@ -1,0 +1,27 @@
+# Flags verify.py is ALLOWED to raise, each checked by eye and explained.
+# A flag that isn't listed here (or is worse than its limit) is reported as
+# NEW and makes verify.py exit with an error.
+#
+# letter  stroke  check     limit  reason
+# check: outside (points), lopsided (%), doubles (count), start (%), end (%)
+B  2  lopsided  55  the waist lanes are off-centre on purpose (two strokes share the bar)
+B  3  lopsided  55  the waist lanes are off-centre on purpose
+K  2  end       70  the arm stops at the notch where it meets the stem: a corner by design
+M  1  lopsided  30  where the stem meets the diagonal at the top
+M  2  lopsided  65  the sharp point at the bottom of the zigzag
+M  2  doubles   1   the sharp point at the bottom of the zigzag
+M  3  lopsided  30  where the stem meets the diagonal at the top
+N  1  lopsided  30  where the stem meets the diagonal
+N  3  lopsided  30  where the stem meets the diagonal
+Q  1  lopsided  32  where the tail crosses the ring
+Q  2  lopsided  40  the tail starts inside the ring
+R  2  lopsided  45  where the leg leaves the bowl
+V  1  lopsided  95  the sharp point at the bottom
+V  1  doubles   1   the sharp point at the bottom
+W  1  lopsided  90  the sharp points of the zigzag
+W  1  doubles   3   the sharp points of the zigzag
+Ñ  1  lopsided  30  as N
+Ñ  3  lopsided  30  as N
+Ñ  4  lopsided  36  the tilde's curves change width; checked by eye at 3x zoom: the dots ride the middle
+Å  1  outside   1   Å's A is a pixel shorter at its peak than A, so the first point is on the edge
+Å  2  outside   1   as stroke 1

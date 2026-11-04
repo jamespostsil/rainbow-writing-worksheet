@@ -291,7 +291,7 @@ class Glyph:
         iy, ix = np.unravel_index(np.argmax(win), win.shape)
         return (float(x - r + ix), float(y - r + iy))
 
-    def ridge_route(self, waypoints, head="edge", tail="edge", snap=0.05):
+    def ridge_route(self, waypoints, head="edge", tail="edge", snap=0.05, face_walk=3.0):
         """Curved stroke through normalized waypoints, riding the middle of
         the ink: a least-cost path where cost falls off steeply with
         distance from the edge, so it hugs the ridge.
@@ -326,11 +326,15 @@ class Glyph:
         path = even_curve([(float(x), float(y)) for x, y in path],
                           min_gap=4.0, step=3.0, window=6)
 
-        path = self._finish(path, tail)
-        path = list(reversed(self._finish(list(reversed(path)), head)))
+        path = self._finish(path, tail, face_walk)
+        path = list(reversed(self._finish(list(reversed(path)), head, face_walk)))
         return path
 
-    def _finish(self, path, how):
+    def _finish(self, path, how, face_walk=3.0):
+        # face_walk: how far back from a flat cut (x half the stroke width)
+        # the row-by-row centres are used. The middle of a row is only the
+        # middle of the stroke while the stroke runs straight; on a short
+        # curvy mark (Ñ's tilde) keep this small or it drifts into the bend.
         """Finish the END of `path` (reverse it to finish the start)."""
         if how == "none":
             return path
@@ -353,7 +357,7 @@ class Glyph:
         x = mids[0][0]
         travelled = 0.0
         y = cut_y
-        while travelled < 3.0 * half:
+        while travelled < face_walk * half:
             y -= int(sgn)
             runs = _runs(self.mask[int(y)])
             hit = [r for r in runs if r[0] <= x <= r[1]]
@@ -436,13 +440,24 @@ class Glyph:
         counters.sort(key=lambda m: np.nonzero(m)[0].mean())
         return outside, counters
 
+    def offset_to(self, base, reach=90):
+        """How far (px) the base letter sits shifted sideways inside this
+        character. Usually 0; Ł moves its L right to make room for the bar."""
+        best, best_dx = -1, 0
+        for dx in range(-reach, reach + 1):
+            score = int((self.mask & np.roll(base.mask, dx, axis=1)).sum())
+            if score > best:
+                best, best_dx = score, dx
+        return best_dx
+
     def marks(self, base):
         """The parts of this character that its base letter doesn't have
         (Ñ's tilde, Ç's cedilla, Ü's dots), left to right. Specks where the
         base is drawn a pixel differently inside the composed character are
         dropped."""
         import cv2
-        extra = (self.mask & ~base.mask).astype(np.uint8)
+        shifted = np.roll(base.mask, self.offset_to(base), axis=1)
+        extra = (self.mask & ~shifted).astype(np.uint8)
         n, labels, stats, cents = cv2.connectedComponentsWithStats(extra)
         biggest = max(stats[i][4] for i in range(1, n))
         out = []
@@ -497,10 +512,12 @@ class Glyph:
 
 def rebase(strokes, src, dst):
     """Move strokes measured on one glyph (N) into another glyph's box (Ñ).
-    Both are rendered at the same origin, so pixels line up; only the
-    normalizing box differs."""
+    Both are rendered at the same origin, so pixels line up, except where
+    the font shifts the base sideways (Ł): that offset is measured."""
+    dx = dst.offset_to(src)
+
     def p(nx, ny):
-        return dst.nx(src.l + nx * src.w), dst.ny(src.b - ny * src.h)
+        return dst.nx(src.l + nx * src.w + dx), dst.ny(src.b - ny * src.h)
     out = []
     for kind, data in strokes:
         if kind == "line":
@@ -516,7 +533,28 @@ def rebase(strokes, src, dst):
 
 
 # A letter with a mark: the base letter's strokes first, then the mark's.
-COMPOSED = {"Ñ": "N", "Ç": "C", "Ü": "U"}
+COMPOSED = {"Ñ": "N", "Ç": "C", "Ü": "U",
+            "Å": "A", "Ø": "O", "Ž": "Z", "Ł": "L", "É": "E"}
+
+
+def _straight_mark(g, p, q, first):
+    """A straight mark (Ø's slash, Ł's bar, É's accent) as one line through
+    two centre points p and q (pixels), run out to the ink's edge both ways.
+
+    Measure p and q FAR APART, each by cutting straight across the band so
+    the cut meets both long edges (rows for a steep band, columns for a
+    shallow one) and never an end cut. Then the line lands on the middle of
+    each end. (The mark's overall direction is not good enough: Ø's ring cuts
+    the slash into uneven pieces, which tilts it, and over the long slash the
+    tilt walked the end into a corner.) `first` is "top" or "left": the end
+    the pen starts at."""
+    d = g._unit(p, q)
+    a, b = g.to_edge(p, (-d[0], -d[1])), g.to_edge(q, d)
+    if first == "top":
+        a, b = (a, b) if a[1] < b[1] else (b, a)
+    else:
+        a, b = (a, b) if a[0] < b[0] else (b, a)
+    return g.seg(a, b)
 
 
 def _mid_down(mask, x):
@@ -540,11 +578,15 @@ def strokes_for(ch):
         marks = g.marks(base)
 
         if ch == "Ñ":
-            # the tilde, left to right, along the middle of its wave
+            # the tilde, left to right, along the middle of its wave. Both
+            # ends are flat level cuts (the left one faces down, the right
+            # one faces up), so land on the middle of each cut like S does:
+            # running out along the tangent ends in a corner.
             m = marks[0]
             x, y, w, h = m["box"]
-            a, b = _mid_down(m["mask"], x + 0.12 * w), _mid_down(m["mask"], x + 0.88 * w)
-            strokes.append(("poly", g.norm(g.ridge_route(g.norm([a, b]), snap=0.01))))
+            a, b = _mid_down(m["mask"], x + 0.25 * w), _mid_down(m["mask"], x + 0.75 * w)
+            strokes.append(("poly", g.norm(g.ridge_route(
+                g.norm([a, b]), head="face-down", tail="face-up", snap=0.01))))
 
         if ch == "Ç":
             # the cedilla hangs from the bottom of the C by a short neck:
@@ -562,6 +604,65 @@ def strokes_for(ch):
             # dots: one tap each, left then right
             for m in marks:
                 strokes.append(("dot", g.norm([m["centre"]])[0]))
+
+        if ch == "Å":
+            # the ring: a small O, started at the top and drawn the same way
+            m = marks[0]
+            x, y, w, h = m["box"]
+            cy = y + h / 2.0
+            left = _runs(m["mask"][int(round(cy))])[0]
+            top = _runs(m["mask"][:, int(round(x + w / 2.0))])[0]
+            rx = w / 2.0 - (left[1] - left[0]) / 2.0
+            ry = h / 2.0 - (top[1] - top[0]) / 2.0
+            (ncx, ncy), = g.norm([(x + w / 2.0, cy)])
+            strokes.append(("arc", (ncx, ncy, rx / g.w, ry / g.h, 90, 435)))
+
+        if ch == "Ž":
+            # the caron: a small V, down to its point and up again. Each arm
+            # is a shallow band ending in an UPRIGHT cut at the side, so it is
+            # measured on columns: a column crosses both long edges of an arm,
+            # while a row near the top runs into the end cut and its middle is
+            # off (that put both ends in the top corners). Then running out
+            # along each centre line lands on the middle of each end cut.
+            m = marks[0]
+            x, y, w, h = m["box"]
+            arm_l = g.line(_mid_down(m["mask"], x + 0.12 * w), _mid_down(m["mask"], x + 0.36 * w))
+            arm_r = g.line(_mid_down(m["mask"], x + 0.88 * w), _mid_down(m["mask"], x + 0.64 * w))
+            v = g.meet(arm_l, arm_r)
+            if not g.inside(*v):
+                v = g.pull_inside(v, (0, -1), 3)
+            out_l = (-arm_l[1][0], -arm_l[1][1])      # away from the point
+            out_r = (-arm_r[1][0], -arm_r[1][1])
+            strokes.append(("poly", g.norm([g.to_edge(arm_l[0], out_l), v,
+                                            g.to_edge(arm_r[0], out_r)])))
+
+        if ch == "Ø":
+            # the slash, from its top end down to its bottom end. It is a
+            # steep band with level end cuts, so it is measured on rows, one
+            # in each end piece outside the ring, near the free end
+            low, high = marks[0], marks[-1]
+            lx, ly, lw, lh = low["box"]
+            hx, hy, hw, hh = high["box"]
+            p = _mid_across(high["mask"], hy + 0.3 * hh, 0)
+            q = _mid_across(low["mask"], ly + 0.7 * lh, 0)
+            strokes.append(_straight_mark(g, p, q, "top"))
+
+        if ch == "Ł":
+            # the bar, left to right across the stem, like crossing a t. A
+            # shallow band with upright end cuts: measured on columns, one in
+            # each piece either side of the stem
+            left, right = marks[0], marks[-1]
+            p = _mid_down(left["mask"], left["box"][0] + 0.5 * left["box"][2])
+            q = _mid_down(right["mask"], right["box"][0] + 0.5 * right["box"][2])
+            strokes.append(_straight_mark(g, p, q, "left"))
+
+        if ch == "É":
+            # the accent, from its top end down. A shallow band with upright
+            # end cuts: measured on columns
+            m = marks[0]
+            x, y, w, h = m["box"]
+            p, q = _mid_down(m["mask"], x + 0.25 * w), _mid_down(m["mask"], x + 0.75 * w)
+            strokes.append(_straight_mark(g, p, q, "top"))
         return strokes
 
     if ch == "A":

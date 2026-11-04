@@ -56,7 +56,9 @@ BOX_TOP = H - 134
 BOX_BOTTOM = 212
 LETTER_SIDE = 22   # the letter may come this close to the page edge
 
-RAIN_CX, RAIN_CY = MARGIN + 90, 66
+# The cloud sits on the rainbow's LEFT foot. Rainbow + cloud span the same
+# x range as when the cloud was on the right (24pt to 288pt).
+RAIN_CX, RAIN_CY = MARGIN + 116, 66
 RAIN_INNER, RAIN_BAND, RAIN_BANDS = 34, 14, 6
 CLOUD_W = 128
 
@@ -74,8 +76,39 @@ BADGE_GAP = 8          # pt of white between two badges
 BADGE_CLEAR = 6        # pt between a badge and another stroke's line or arrow
 ARROW_AIM = 10         # arrowheads point along the stroke's last this-many pt
 
-# letter -> (keyword, picture, spoken formation cue). The picture is an
-# OpenMoji codepoint, or the name of a drawing made here.
+# Every word on a page is in that page's language. Translations other than
+# English are first drafts: have a native speaker check them before printing
+# for real.
+PAGE_TEXT = {
+    "en": {"title": "Rainbow writing", "name": "Name:",
+           "trace": "Trace the numbered strokes in order. Use a new color each time.",
+           "say": "Say it:", "is_for": "{L} is for {word}", "page": "{n} of {total}"},
+    "es": {"title": "Escritura arcoíris", "name": "Nombre:",
+           "trace": "Repasa los trazos numerados en orden. Usa un color nuevo cada vez.",
+           "say": "Dilo:", "is_for": "{L} de {word}", "page": "{n} de {total}"},
+    "tr": {"title": "Gökkuşağı yazısı", "name": "Adın:",
+           "trace": "Numaralı çizgilerin üzerinden sırayla geç. Her seferinde yeni bir renk kullan.",
+           "say": "Söyle:", "is_for": "{L} harfi: {word}", "page": "{n} / {total}"},
+    "sv": {"title": "Regnbågsskrivning", "name": "Namn:",
+           "trace": "Följ de numrerade dragen i ordning. Byt färg varje gång.",
+           "say": "Säg:", "is_for": "{L} som i {word}", "page": "{n} av {total}"},
+    "da": {"title": "Regnbueskrivning", "name": "Navn:",
+           "trace": "Følg de nummererede streger i rækkefølge. Brug en ny farve hver gang.",
+           "say": "Sig:", "is_for": "{L} som i {word}", "page": "{n} af {total}"},
+    "hr": {"title": "Dugino pisanje", "name": "Ime:",
+           "trace": "Prati numerirane poteze redom. Svaki put uzmi novu boju.",
+           "say": "Reci:", "is_for": "{L} kao {word}", "page": "{n} od {total}"},
+    "pl": {"title": "Tęczowe pisanie", "name": "Imię:",
+           "trace": "Obrysuj ponumerowane linie po kolei. Za każdym razem użyj nowego koloru.",
+           "say": "Powiedz:", "is_for": "{L} jak {word}", "page": "{n} z {total}"},
+    "fr": {"title": "Écriture arc-en-ciel", "name": "Prénom :",
+           "trace": "Repasse les traits numérotés dans l'ordre. Change de couleur à chaque fois.",
+           "say": "Dis :", "is_for": "{L} comme {word}", "page": "{n} sur {total}"},
+}
+
+# letter -> (keyword, picture, spoken formation cue[, language]). The picture
+# is an OpenMoji codepoint, or the name of a drawing made here. The language
+# (a PAGE_TEXT key) defaults to English.
 LETTERS = {
     "A": ("Apple", 0x1F34E, "slant down, slant down, across"),
     "B": ("Bear", 0x1F43B, "down, around, around"),
@@ -104,11 +137,21 @@ LETTERS = {
     "Y": ("Yo-yo", 0x1FA80, "slant in, slant in, down"),
     "Z": ("Zebra", 0x1F993, "across, slant down, across"),
     # Letters with marks. Not in the default alphabet: ask for them with
-    # --letters. Keywords are in a language that uses the letter.
-    "Ñ": ("ñame", 0x1F360, "down, slant down, up, then the wave"),      # Spanish: yam
-    "Ç": ("çay", 0x2615,"curve all the way around, then the hook"),   # Turkish: tea
-    "Ü": ("üzüm", 0x1F347, "down, curve around, up, dot, dot"),         # Turkish: grapes
+    # --letters. Each page is in a language that uses the letter.
+    "Ñ": ("ñame", 0x1F360, "abajo, en diagonal, arriba, y la onda", "es"),       # yam
+    "Ç": ("çay", 0x2615, "yuvarlak çiz, sonra çengel", "tr"),                   # tea
+    "Ü": ("üzüm", 0x1F347, "aşağı, yuvarla, yukarı, nokta, nokta", "tr"),       # grapes
+    "Å": ("åsna", 0x1FACF, "snett ner, snett ner, tvärs över, sedan ringen", "sv"),  # donkey
+    "Ø": ("øre", 0x1F442, "hele vejen rundt, så skråstregen", "da"),           # ear
+    "Ž": ("žirafa", 0x1F992, "preko, koso dolje, preko, pa kvačica", "hr"),    # giraffe
+    "Ł": ("łódka", 0x26F5, "w dół, w prawo, potem kreska", "pl"),               # boat
+    "É": ("étoile", 0x2B50, "en bas, trois traits, puis l'accent", "fr"),      # star
 }
+
+
+def page_text(ch):
+    entry = LETTERS[ch]
+    return PAGE_TEXT[entry[3] if len(entry) > 3 else "en"]
 
 
 # --------------------------------------------------------------------------
@@ -137,13 +180,15 @@ def centered(c, text, font, size, y, color):
     text_at(c, (W - pdfmetrics.stringWidth(text, font, size)) / 2, y, text, font, size, color)
 
 
-def draw_header(c, title):
+def draw_header(c, title, name_label):
     text_at(c, MARGIN, HEADER_Y, title, "Poppins-Bold", 20, INK)
-    text_at(c, W - 236, HEADER_Y - 4, "Name:", "Poppins", 13, INK)
+    text_at(c, W - 236, HEADER_Y - 4, name_label, "Poppins", 13, INK)
     c.setStrokeColor(INK)
     c.setLineWidth(1)
     c.setDash([], 0)
-    c.line(W - 192, HEADER_Y - 8, W - MARGIN, HEADER_Y - 8)
+    # the line starts just after the label, however long the word is
+    line_x = max(W - 192, W - 236 + pdfmetrics.stringWidth(name_label, "Poppins", 13) + 6)
+    c.line(line_x, HEADER_Y - 8, W - MARGIN, HEADER_Y - 8)
 
 
 # --------------------------------------------------------------------------
@@ -430,7 +475,7 @@ def draw_xylophone(c, cx, cy):
 
 def draw_picture(c, ch):
     """Line drawing of something that starts with the letter, and its caption."""
-    keyword, pic, _ = LETTERS[ch]
+    keyword, pic = LETTERS[ch][:2]
     if pic == "xylophone":
         ink = draw_xylophone(c, PIC_CX, PIC_CY)
     else:
@@ -442,7 +487,7 @@ def draw_picture(c, ch):
         text_at(c, gx, gy, chr(pic), "Pic", size, LINE)
         ink = (gx + x0 * size, gy + y0 * size, gx + x1 * size, gy + y1 * size)
 
-    label = f"{ch} is for {keyword}"
+    label = page_text(ch)["is_for"].format(L=ch, word=keyword)
     lw = pdfmetrics.stringWidth(label, "Poppins", CAPTION_SIZE)
     text_at(c, PIC_CX - lw / 2, CAPTION_Y, label, "Poppins", CAPTION_SIZE, INK)
     caption = (PIC_CX - lw / 2, CAPTION_Y - 4, PIC_CX + lw / 2, CAPTION_Y + 12.5)
@@ -565,31 +610,40 @@ def check_page(ch, strokes, letter_ink, letter_hit, cap, pic_ink, caption, rain,
 
 
 def draw_page(c, ch, title, page_no, total):
-    draw_header(c, title)
-    centered(c, "Trace the numbered strokes in order. Use a new color each time.",
-             "Poppins", 13, INSTRUCTION_Y, SOFT)
-    centered(c, f"Say it:  {LETTERS[ch][2]}", "Poppins", 13, CUE_Y, SOFT)
+    """One page, with every word in the letter's language (PAGE_TEXT).
+    `title` replaces the heading only when given (--title)."""
+    words = page_text(ch)
+    draw_header(c, title or words["title"], words["name"])
+    lines = [words["trace"], f"{words['say']}  {LETTERS[ch][2]}"]
+    centered(c, lines[0], "Poppins", 13, INSTRUCTION_Y, SOFT)
+    centered(c, lines[1], "Poppins", 13, CUE_Y, SOFT)
+    too_wide = [s for s in lines if pdfmetrics.stringWidth(s, "Poppins", 13) > W - 2 * MARGIN]
 
     x, y, size, letter_ink = draw_letter(c, ch)
     strokes = draw_strokes(c, ch, x, y, size)
     rain = draw_rainbow(c)
     foot = RAIN_INNER + RAIN_BANDS * RAIN_BAND / 2
-    cloud = draw_cloud(c, RAIN_CX + foot, RAIN_CY - 12, CLOUD_W)
+    cloud = draw_cloud(c, RAIN_CX - foot, RAIN_CY - 12, CLOUD_W)
     pic_ink, caption = draw_picture(c, ch)
 
-    label = f"{page_no} of {total}"
+    label = words["page"].format(n=page_no, total=total)
     text_at(c, (W - pdfmetrics.stringWidth(label, "Poppins", 12)) / 2, FOOTER_Y,
             label, "Poppins", 12, SOFT)
     hit = letter_hit_test(ch, x, y, size)
-    return size, check_page(ch, strokes, letter_ink, hit, CAP_RATIO * size, pic_ink,
-                            caption, rain, cloud)
+    issues = check_page(ch, strokes, letter_ink, hit, CAP_RATIO * size, pic_ink,
+                        caption, rain, cloud)
+    issues += [f"instruction line too wide for the page: {s!r}" for s in too_wide]
+    if caption[0] < PIC_CX - 110 or caption[2] > W - 18:
+        issues.append("caption too wide for its spot")
+    return size, issues
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--letters", default="ABCDEFGHIJKLMNOPQRSTUVWXYZ")
     ap.add_argument("--out", default="Rainbow Writing.pdf")
-    ap.add_argument("--title", default="Rainbow writing")
+    ap.add_argument("--title", default=None,
+                    help="heading for every page (default: 'Rainbow writing' in each page's language)")
     args = ap.parse_args()
 
     asked = args.letters.upper()
@@ -598,7 +652,7 @@ def main():
     if skipped:
         print(f"  skipped (not in the LETTERS table): {' '.join(skipped)}")
     c = canvas.Canvas(args.out, pagesize=LETTER)
-    c.setTitle(args.title)
+    c.setTitle(args.title or PAGE_TEXT["en"]["title"])
     problems = 0
     for i, ch in enumerate(letters, start=1):
         size, issues = draw_page(c, ch, args.title, i, len(letters))

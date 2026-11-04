@@ -1,6 +1,17 @@
 # Adding a letter
 
-This guide shows how to add a new letter to the worksheets. Ñ, Ç and Ü were added by following these steps, so they are worked examples. They also cover the three kinds of marks: a mark above the letter, a mark below it, and dots.
+This guide shows how to add a new letter to the worksheets. Eight letters with marks were added by following these steps, so they are worked examples:
+
+| Letter | Mark | Page language |
+|---|---|---|
+| Ñ | tilde above | Spanish |
+| Ç | cedilla below | Turkish |
+| Ü | two dots | Turkish |
+| Å | ring above | Swedish |
+| Ø | slash through the letter | Danish |
+| Ž | caron (a small v) above | Croatian |
+| Ł | bar across the stem | Polish |
+| É | acute accent | French |
 
 Read [SKILL.md](SKILL.md) first. Its "What the pages must get right" list is the standard every new letter must meet.
 
@@ -8,17 +19,14 @@ Read [SKILL.md](SKILL.md) first. Its "What the pages must get right" list is the
 
 1. **Check that the font has the letter.** See [Step 1](#step-1-check-the-font-has-the-letter).
 2. **Write the strokes** in `strokes_for()` in [scripts/letterform.py](scripts/letterform.py).
-3. **Run the stroke checker** and look at its overlay picture:
-   ```
-   python scripts/verify.py Ñ
-   ```
-4. **Add a row to the `LETTERS` table** in [scripts/make_rainbow.py](scripts/make_rainbow.py): the keyword, the picture, and the "Say it" cue.
+3. **Test the strokes** with all three tests in [Step 3](#step-3-test-the-strokes): the checker on every letter, a check that the checker can catch your kind of bug, and a 3x zoom of every stroke end and mark on the real page.
+4. **Add a row to the `LETTERS` table** in [scripts/make_rainbow.py](scripts/make_rainbow.py): the keyword, the picture, the "Say it" cue, and the page's language.
 5. **Make the page** and make sure it says `ok`:
    ```
    python scripts/make_rainbow.py --letters Ñ --out test.pdf
    ```
 6. **Render the page and look at it closely.** Zoom in on anything that looks slightly wrong. If it looks wrong, it is wrong.
-7. **Run the whole alphabet again** and check that every page still says `ok`. Shared code changes can move other letters.
+7. **Run every letter again,** both the checker and the pages. Shared code changes can move other letters.
 
 **On Windows:** run `set PYTHONIOENCODING=utf-8` first (in PowerShell: `$env:PYTHONIOENCODING="utf-8"`). If you don't, printing a letter like Ñ crashes the script.
 
@@ -90,58 +98,115 @@ Find the letter that is most like yours, and copy its branch in `strokes_for()`.
 - **`"face-down"` / `"face-up"`:** for a stroke that ends in a flat, level cut (S, G, J). The path lands on the middle of the cut, square to it.
 - **`"none"`:** you finish the stroke yourself. G uses this for its sharp corner.
 
-### Letters with marks (Ñ, Ç, Ü)
+### Letters with marks
 
 **Don't measure the base letter again.** Add the character to `COMPOSED` in `letterform.py`:
 
 ```python
-COMPOSED = {"Ñ": "N", "Ç": "C", "Ü": "U"}
+COMPOSED = {"Ñ": "N", "Ç": "C", "Ü": "U", "Å": "A", "Ø": "O", "Ž": "Z", "Ł": "L", "É": "E"}
 ```
 
 The code then:
-1. **Takes the base letter's strokes** (N) and moves them into the new character's box with `rebase()`. Both letters are drawn at the same origin, so their pixels line up.
+1. **Takes the base letter's strokes** (N) and moves them into the new character's box with `rebase()`. Both letters are drawn at the same origin. Some fonts shift the base sideways inside the new character (Poppins moves Ł's L 11 px right to make room for the bar), so `g.offset_to(base)` measures that shift first.
 2. **Finds the marks** with `g.marks(base)`: the ink that the base letter does not have, sorted left to right. Small specks are dropped. They appear where the font draws the base a pixel differently: Ç's C is about 1 px different from a plain C.
 3. **Adds a stroke for each mark.** This is the only part you write:
-   - **Tilde (Ñ):** `ridge_route` from 12% to 88% of the way across the tilde, left to right.
-   - **Cedilla (Ç):** it hangs from the C by a short neck. The stroke starts where the neck leaves the C, goes down and round the hook, and ends on its flat end. It uses `head="none"` and adds the start point by hand.
-   - **Dots (Ü):** one `"dot"` stroke per dot, at its centre, left then right.
+
+| Mark | How it is traced |
+|---|---|
+| Tilde (Ñ) | `ridge_route` left to right. Both ends are flat level cuts, so `head="face-down"` and `tail="face-up"` land on the middle of each. |
+| Cedilla (Ç) | Starts where its neck leaves the C, goes down and round the hook, ends on its flat end. `head="none"` and the start point is added by hand. |
+| Dots (Ü) | One `"dot"` stroke per dot, at its centre, left then right. |
+| Ring (Å) | An `"arc"`, started at the top like O. |
+| Caron (Ž) | Each arm's centre line from two **columns**, meeting at the point. |
+| Slash (Ø) | A line through two centre points measured on **rows**, one in each end piece outside the ring. |
+| Bar (Ł), accent (É) | A line through two centre points measured on **columns**. |
+
+**Measure across a band so the cut meets both long edges** of the band:
+- **Rows for a steep band** (Ø's slash).
+- **Columns for a shallow band** (Ž's arms, Ł's bar, É's accent).
+- **Never through an end cut.** Ž's arms end in upright cuts, so rows near the top hit the end instead of crossing the arm. Their "middles" were off, and both ends of the caron finished in its top corners.
+
+**Use two centre points far apart,** not the mark's overall direction. Ø's ring cuts the slash into uneven pieces, which tilted the overall direction. Over the long slash, that small tilt walked the bottom end into a corner.
 
 **Use a small `snap` for marks.** `ridge_route` first moves each waypoint to the thickest ink nearby. The default search radius is 5% of the cap height. Near the cedilla, the thickest ink nearby is the C itself, so the waypoint jumped into the C. The tilde and cedilla use `snap=0.01`.
 
-**The page sizes these letters for you.** A character that goes below the baseline or above the cap height is made smaller until the whole thing fits (Q, Ñ, Ç, Ü). Other letters keep the full 6.19 inch cap height.
+**The page sizes these letters for you.** A character that goes below the baseline or above the cap height is made smaller until the whole thing fits (Q, Ñ, Ç, Ü, Å, Ž, É). Other letters keep the full 6.19 inch cap height.
 
-## Step 3: read the stroke checker
+## Step 3: test the strokes
 
-`verify.py` checks each stroke against the real letter. It prints one row per stroke and writes `verify_sheet_*.png` overlays into the current folder. Run it from a scratch folder.
+Do all three tests. Each one has caught a bug the other two missed.
+
+### Test 1: run the checker on every letter
+
+```
+python scripts/verify.py ABCDEFGHIJKLMNOPQRSTUVWXYZÑÇÜÅØŽŁÉ
+```
+
+Run it from a scratch folder: it writes overlay pictures (`verify_sheet_*.png`) into the current folder. **Run every letter, not just yours.** Shared code (`rebase`, `ridge_route`, the checker itself) can change other letters.
+
+It prints one row per stroke:
 
 | Column | Meaning | Flagged when |
 |---|---|---|
-| outside | Points of the path that fall outside the ink | more than 0 |
-| lopsided | How far the path sits from the middle of the stroke. 0% is centred. | more than 25% |
+| outside | Points of the path outside the ink | more than 0 |
+| lopsided | How far the path sits from the middle of the stroke, along its length. 0% is centred. | more than 25% |
 | worst at | Where the worst lopsided point is (x, y in the ink box) | |
 | doubles back | Places where the path turns back on itself, which bunches the dots | more than 0 |
+| start, end | How far each end sits from the middle of the cut it ends on. 0% is centred, 100% is a corner. `-` means the end is inside the ink (a junction). | more than 25% |
 
-**Expected flags** (these are fine, but a new flag anywhere else is not):
-- **B 2-3:** the waist lanes are off-centre on purpose.
-- **M, V, W:** their sharp turns count as "doubling back", and the tips read as lopsided.
-- **M 1, 3 and N 1, 3 (and Ñ 1, 3):** about 25% where the stems meet the diagonals.
-- **Q 1-2, R 2:** junctions, where Q's tail meets its ring and R's leg meets its bowl.
+**Every flag is either expected or NEW.** Expected flags are listed in [scripts/verify_expected.txt](scripts/verify_expected.txt), each with a limit and a reason. The checker prints the reason next to the row. Anything not in the list, or worse than its limit, prints `<-- NEW`, and the checker exits with an error. **The test passes only with 0 NEW.**
 
-**Junctions:** the checker skips the first and last 10% of each stroke and any spot where the ink is more than 1.35 times its usual width. So a flag right at a junction is usually the other stroke, not a bad path. **Check the overlay to be sure.**
+**Why "start, end" exists:** the lopsided column skips the first and last 10% of each stroke, because junctions make the ends noisy. That's exactly where three bugs were: Ñ's tilde, Ž's caron and Ø's slash all ended in a corner, and the checker said nothing. The end check follows the letter's outline both ways from the end until it turns a corner. That stretch is the cut, and a centred end sits in its middle.
 
-**The checker looks sideways a fixed distance** (35% of the cap height) to find the stroke's edges. At first that distance was 35% of the ink box's height. Ñ's tilde made its box taller, so the checker looked farther, found the far wall of the N, and reported Ñ's diagonal as 55% off-centre. The diagonal was actually identical to N's. **For any "how close is near" distance, use `g.cap_px`, never `g.h`.**
+### Test 2: prove the checker can catch your kind of bug
+
+When you find a bug the checker missed, **first add a check that fails on the old code, then fix the code.** To run the new checker on the old code:
+
+```
+mkdir old && cd old && mkdir scripts assets
+git show HEAD:scripts/letterform.py > scripts/letterform.py
+cp ../scripts/verify.py ../scripts/verify_expected.txt scripts/
+cp -r ../assets/fonts assets/
+python scripts/verify.py Ñ
+```
+
+The end check was proved this way: on v1.1's tilde it reports `85% 85% <-- NEW: start, end`. On the fixed tilde it reports 1% and 0%.
+
+### Test 3: look at every end and every mark, zoomed in on the real page
+
+Render the page at 3x and crop each mark and each stroke end. For every end, ask: **is this the middle of the cut?** For every stroke, ask: **do the dots ride the middle?** At full-page size, an end in a corner looks fine. The tilde bug was only visible zoomed in.
+
+### Adding a flag to the expected list
+
+Only after looking at it zoomed in. Give the reason, and a limit just above the measured value.
+
+**Never because a similar letter has the same flag.** Ž's caron was flagged 77% lopsided, and that was written off as "like V's sharp tip". It was a real bug: the line ran along the top edge of the caron.
+
+### What the checker can't judge
+
+- **Stroke order and direction,** and whether they match the "Say it" cue.
+- **Lopsided numbers on curves that change width.** The checker measures straight out to each side of the path, so a curve that gets thicker or thinner can read lopsided when it isn't. Ñ's tilde reads 33% but the dots are centred at 3x zoom. Judge these by eye.
+- **Pictures and translations.**
+
+### Bugs in the checker itself
+
+- **Use `g.cap_px`, never `g.h`, for "how far is near".** The checker looks sideways 35% of the cap height to find a stroke's edges. At first it used 35% of the ink box's height. Ñ's tilde made the box taller, so the checker found the far wall of the N and reported Ñ's diagonal as 55% off-centre. The diagonal was identical to N's.
+- **Store per-letter data on the letter object,** not in a dict keyed by `id()`. Python reuses ids once an object is freed, and later letters were checked against an earlier letter's outline. H's straight stems scored 100%.
 
 ## Step 4: add the keyword, picture and cue
 
 Add a row to the `LETTERS` table in `make_rainbow.py`:
 
 ```python
-"Ñ": ("ñame", 0x1F360, "down, slant down, up, then the wave"),
+"Ñ": ("ñame", 0x1F360, "abajo, en diagonal, arriba, y la onda", "es"),
 ```
 
-- **Keyword:** the caption reads "Ñ is for ñame". Use a word in a language that has the letter. Keep short-vowel words for vowels.
+- **Keyword:** a word that starts with the letter, in a language that uses it. Keep short-vowel words for vowels.
 - **Picture:** an OpenMoji code point, or the name of a drawing function in `make_rainbow.py` (like `xylophone`).
-- **"Say it" cue:** one short phrase per stroke, in the same order as the strokes. Call a mark by what it is: "then the wave", "then the hook", "dot, dot".
+- **"Say it" cue:** one short phrase per stroke, in the same order as the strokes. Call a mark by what it is ("the wave", "the hook", "dot, dot").
+- **Language:** a key in the `PAGE_TEXT` table. **Every word on the page is in this language:** the title, "Name", the instructions, "Say it", the caption ("Ñ de ñame") and the page number ("1 de 8"). Leave it out for English.
+
+**Adding a language:** add an entry to `PAGE_TEXT` with all six phrases. The page checks flag an instruction line or caption that's too wide for the page. **Have a native speaker check the phrases.** The ones in the table now are first drafts.
 
 **Checking a picture:**
 1. **Check it's in the font:**
@@ -184,7 +249,9 @@ Each page line says `ok` or lists what is wrong:
 - **Missing letters draw as an empty box.** Ŋ, Ɛ and Ɔ measured as the same size because each one was the font's "missing letter" box. `Glyph()` now refuses them.
 - **The ink box is not the cap height.** A mark makes the box taller without making the strokes thicker. Use `g.cap_px` for distances.
 - **Waypoints jump to thick ink.** Use a small `snap` near a big stroke.
-- **Flat stroke ends pull the path to a corner.** Near a flat cut, the middle of the ink splits toward the cut's two corners. Use `"face-down"`/`"face-up"`.
+- **Flat stroke ends pull the path to a corner.** Near a flat cut, the middle of the ink splits toward the cut's two corners. Use `"face-down"`/`"face-up"`. Check what kind of end a mark has before choosing: the tilde's ends are flat level cuts, so `"edge"` ran it into a corner.
+- **A cut that hits an end cut has the wrong middle.** Cut across a band where it meets both long edges: rows for steep bands, columns for shallow ones.
+- **The base letter can move inside a composed letter** (Ł's L). `offset_to()` measures it.
 - **Aim arrows by length, not by point count.** M, V and W are stored as only 3 to 5 corners. "Three points back" is the far side of the letter.
 - **Two strokes on one bar need their own lanes** (B's waist), or the dots land on top of each other.
 - **Keep corners sharp.** G turns sharply into its bar, so don't let smoothing round it off.
@@ -204,4 +271,5 @@ To support letters like Ŋ, Ɛ and Ɔ, the skill needs a font that has them. For
 ## Not built yet
 
 - **Lowercase.** It needs its own stroke branches, a school-style font, and sizing by x-height with room for ascenders and descenders.
-- **Other languages for the page text.** "Rainbow writing" can be changed with `--title`. The instructions, the "Say it" cues and "is for" in the caption are still English.
+- **Checked translations.** Seven languages have first-draft page text. A native speaker should check each before real use.
+- **Checked stroke directions for marks.** Ł's bar goes left to right, and É's accent and Ø's slash go from the top end down. These follow the manuscript rules (start at the top, bars go left to right) but haven't been checked against how each country teaches handwriting.

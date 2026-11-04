@@ -90,6 +90,96 @@ def check_stroke(g, pts, skip=0.10):
     return outside, worst, at, rev
 
 
+def contours(g):
+    """The ink's outlines, kept on the glyph itself. (Not in a dict keyed
+    by id(g): Python reuses ids once a glyph is freed, and later letters
+    were measured against an earlier letter's outline.)"""
+    import cv2
+    if not hasattr(g, "_contours"):
+        cs, _ = cv2.findContours(g.mask.astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+        g._contours = [c[:, 0, :].astype(float) for c in cs if len(c) > 20]
+    return g._contours
+
+
+def end_check(g, pts, stroke_w, turn=30.0, win=6):
+    """Is a stroke end on the middle of the cut it ends on?
+
+    check_stroke skips the first and last 10% of every stroke, which is
+    exactly where Ñ's tilde, Ž's caron and Ø's slash went wrong (each ended
+    in a corner). So: from the end point, follow the ink's outline both ways
+    until it turns more than `turn` degrees (a corner). That stretch is the
+    cut. A centred end sits in its middle, and a real cut is at least about
+    half a stroke wide; a corner gives a lopsided or very short stretch.
+    Ends inside the ink (a junction, or E's bars that stop short of the
+    tip) are skipped. Returns (lopsided, cut_len_px) or None."""
+    x, y = pts
+    dt = g.dist()
+    xi, yi = int(round(x)), int(round(y))
+    if g.inside(x, y) and dt[yi, xi] > 4:
+        return None
+    best = None
+    for c in contours(g):
+        d = np.hypot(c[:, 0] - x, c[:, 1] - y)
+        k = int(np.argmin(d))
+        if best is None or d[k] < best[0]:
+            best = (d[k], c, k)
+    _, c, k = best
+    n = len(c)
+
+    def direction(i):
+        a, b = c[(i - win) % n], c[(i + win) % n]
+        v = b - a
+        return v / (np.hypot(*v) or 1.0)
+
+    d0 = direction(k)
+    lens = []
+    for step in (1, -1):
+        i, length = k, 0.0
+        while length < 0.6 * g.cap_px:
+            j = (i + step) % n
+            if math.degrees(math.acos(max(-1.0, min(1.0, float(direction(j) @ d0))))) > turn:
+                break
+            length += float(np.hypot(*(c[j] - c[i])))
+            i = j
+        # A stroke can end on an edge that carries on along another stroke
+        # (the top of E's stem runs on along its top arm), so only the first
+        # 0.6 stroke widths each way count. A centred end still scores ~0%,
+        # and a corner still scores ~100%.
+        lens.append(min(length, 0.6 * stroke_w))
+    total = lens[0] + lens[1]
+    lop = abs(lens[0] - lens[1]) / total if total else 1.0
+    if total < 0.5 * stroke_w:
+        lop = 1.0                 # the "cut" is a corner, not a cut
+    return lop, total
+
+
+def stroke_width(g, pts):
+    dt = g.dist()
+    vals = [dt[int(round(y)), int(round(x))] for x, y in pts if g.inside(x, y)]
+    return 2.0 * float(np.median(vals)) if vals else 0.0
+
+
+def load_expected():
+    """(letter, stroke, check) -> (limit, reason) from verify_expected.txt."""
+    import os
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "verify_expected.txt")
+    out = {}
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            ch, n, check, limit, reason = line.split(None, 4)
+            out[(ch, int(n), check)] = (int(limit), reason)
+    return out
+
+
+def v_over(expected, ch, n, check, value):
+    """Is this flag NEW: not listed, or worse than its listed limit?"""
+    e = expected.get((ch, n, check))
+    return e is None or value > e[0]
+
+
 def sheet(letters, path, cols=6, tile=300):
     rows = (len(letters) + cols - 1) // cols
     img = Image.new("RGB", (cols * tile, rows * tile), "white")
@@ -133,14 +223,42 @@ def sheet(letters, path, cols=6, tile=300):
 
 if __name__ == "__main__":
     letters = sys.argv[1] if len(sys.argv) > 1 else "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    print(f"{'':3}{'stroke':>7} {'outside':>8} {'lopsided':>9}  {'worst at (x,y)':<16} {'doubles back':>12}")
+    expected = load_expected()
+    new_count = 0
+    print(f"{'':3}{'stroke':>7} {'outside':>8} {'lopsided':>9}  {'worst at (x,y)':<16} "
+          f"{'doubles back':>12} {'start':>6} {'end':>6}")
     for ch in letters:
         g = Glyph(ch)
         for n, (kind, data) in enumerate(strokes_for(ch), 1):
-            out, worst, at, rev = check_stroke(g, to_px(g, kind, data))
-            flag = "  <--" if out or worst > 0.25 or rev else ""
+            px = to_px(g, kind, data)
+            out, worst, at, rev = check_stroke(g, px)
+            ends = ["", ""]
+            measured = {"outside": out, "lopsided": round(worst * 100), "doubles": rev}
+            if kind != "dot":
+                sw = stroke_width(g, resample(px))
+                for k, (name, p) in enumerate((("start", px[0]), ("end", px[-1]))):
+                    r = end_check(g, p, sw)
+                    if r is None:
+                        ends[k] = "-"        # ends inside the ink: not on a cut
+                    else:
+                        ends[k] = f"{r[0]:.0%}"
+                        measured[name] = round(r[0] * 100)
+            limits = {"outside": 0, "lopsided": 25, "doubles": 0, "start": 25, "end": 25}
+            problems = [c for c, v in measured.items() if v > limits[c]]
+            new = [c for c in problems if v_over(expected, ch, n, c, measured[c])]
+            if new:
+                new_count += 1
+                flag = "  <-- NEW: " + ", ".join(new)
+            elif problems:
+                flag = "  (expected: " + expected[(ch, n, problems[0])][1] + ")"
+            else:
+                flag = ""
             at_s = f"({at[0]:.2f},{at[1]:.2f})" if at else "-"
-            print(f"{ch:3}{n:>7} {out:>8} {worst:>8.0%}  {at_s:<16} {rev:>12}{flag}")
+            print(f"{ch:3}{n:>7} {out:>8} {worst:>8.0%}  {at_s:<16} {rev:>12} "
+                  f"{ends[0]:>6} {ends[1]:>6}{flag}")
     sheet(letters[:13], "verify_sheet_1.png")
     if len(letters) > 13:
         sheet(letters[13:], "verify_sheet_2.png")
+    print(f"\n{new_count} stroke{'s' if new_count != 1 else ''} with NEW problems"
+          + ("" if new_count else " (all flags are listed in verify_expected.txt)"))
+    sys.exit(1 if new_count else 0)
