@@ -6,7 +6,7 @@ picture, so it prints in the same line style as the OpenMoji pictures.
 Pasting the picture in as an image doesn't work: at its printed size (about
 124 pt wide) the drawing's thin lines nearly disappear. Instead:
 
-- outline: the outer edge of the whole shape, as one closed line. It is
+- outlines: the outer edge of each object, as a closed line. They are
   drawn at the same weight as the OpenMoji pictures.
 - marks: every line inside the shape, thinned to its centre line. They are
   drawn thinner.
@@ -53,13 +53,16 @@ def trace(png):
     cv2.floodFill(flood, mask, (0, 0), 128)
     shape = (flood != 128).astype(np.uint8)
     cs, _ = cv2.findContours(shape, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    outer = max(cs, key=cv2.contourArea)
-    x, y, w, h = cv2.boundingRect(outer)
-    outline = cv2.approxPolyDP(outer, 0.8, True)[:, 0, :]
+    # every separate object (a whole sweet potato AND its cut half), not
+    # just the biggest one; tiny bits are specks
+    biggest = max(cv2.contourArea(k) for k in cs)
+    outers = [k for k in cs if cv2.contourArea(k) > 0.05 * biggest]
+    x, y, w, h = cv2.boundingRect(np.vstack(outers))
+    outlines = [cv2.approxPolyDP(k, 0.8, True)[:, 0, :] for k in outers]
 
-    # the marks: centre lines of the ink, minus the outline itself
+    # the marks: centre lines of the ink, minus the outlines themselves
     near_edge = np.zeros_like(ink)
-    cv2.drawContours(near_edge, [outer], -1, 1, thickness=9)
+    cv2.drawContours(near_edge, outers, -1, 1, thickness=9)
     skel = skeletonize(ink.astype(bool)) & ~near_edge.astype(bool)
     n, labels = cv2.connectedComponents(skel.astype(np.uint8), connectivity=8)
     marks = []
@@ -75,11 +78,12 @@ def trace(png):
     def norm(points):
         return [[round((px - x) / w, 4), round(1 - (py - y) / h, 4)] for px, py in points]
 
-    return {"aspect": round(w / h, 4), "outline": norm(outline), "marks": [norm(m) for m in marks]}
+    return {"aspect": round(w / h, 4), "outlines": [norm(o) for o in outlines],
+            "marks": [norm(m) for m in marks]}
 
 
 if __name__ == "__main__":
     data = trace(sys.argv[1])
     with open(sys.argv[2], "w", encoding="utf-8") as f:
         json.dump(data, f)
-    print(f"outline {len(data['outline'])} points, {len(data['marks'])} marks, aspect {data['aspect']}")
+    print(f"{len(data['outlines'])} outlines, {len(data['marks'])} marks, aspect {data['aspect']}")

@@ -495,18 +495,20 @@ def draw_traced(c, cx, cy, name, mark_width=1.8):
     c.setLineCap(1)
     c.setLineJoin(1)
     c.setDash([], 0)
-    path(data["outline"], True, 3.0)
+    for o in data.get("outlines", [data.get("outline")]):
+        path(o, True, 3.0)
     for m in data["marks"]:
         path(m, False, mark_width)
     return (x0 - 1.5, y0 - 1.5, x0 + w + 1.5, y0 + h + 1.5)
 
 
 def draw_sweet_potato(c, cx, cy):
-    """Sweet potato (ñame), traced from a Canva drawing made with the
-    family's nonprofit Canva account (assets/pictures/sweet-potato-canva.png).
+    """Sweet potato (ñame), whole and cut in half, traced from a Canva drawing
+    made with a nonprofit Canva account (assets/pictures/sweet-potato-cut-canva.png).
+    The cut half shows it's a vegetable, which the whole one alone didn't.
     OpenMoji's own read as a leaf, and two drawn in code read as a pea pod
     and a croissant."""
-    return draw_traced(c, cx, cy, "sweet-potato")
+    return draw_traced(c, cx, cy, "sweet-potato-cut")
 
 
 DRAWINGS = {}       # picture name -> drawing function; filled in below
