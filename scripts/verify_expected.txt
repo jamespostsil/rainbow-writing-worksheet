@@ -29,7 +29,8 @@ a  2  lopsided  32  where the bowl joins the stem; the stem's line is straight d
 d  2  lopsided  30  where the bowl joins the stem, as a
 2  1  lopsided  40  the sharp corner where the slant meets the base (checked zoomed: the corner sits on both centre lines)
 2  1  doubles   1   the sharp corner where the slant turns back along the base
-3  1  lopsided  62  the middle bar's two lanes are off-centre on purpose (the bar is travelled in and back out)
+3  1  lopsided  45  the way in and the way out along the middle bar sit either side of its middle, meeting in a point at its end
 4  1  doubles   1   the sharp corner where the slant turns back along the bar
-4  2  lopsided  50  where the stem passes the top of the slant (a junction); the line is straight down the stem's middle
 8  1  lopsided  50  where the two passes cross in the waist (an X by design)
+5  1  lopsided  45  where the turn leaves the stem: the ink below includes the stem's foot (checked zoomed: the turn runs along the belly band's middle)
+3  1  doubles   1   the point at the end of the middle bar, where the way in turns back out

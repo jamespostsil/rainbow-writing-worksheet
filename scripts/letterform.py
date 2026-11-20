@@ -750,14 +750,15 @@ def _numbers(g, ch):
         return [poly(curve + [corner, g.to_edge((corner[0], bar_y), RIGHT, inset)])]
 
     if ch == "3":
-        # round the top bowl and in along the middle bar to its end, then
-        # back out and round the bottom bowl. The bar is travelled twice, so
-        # the way in and the way out each get their own lane (like B's waist)
+        # round the top bowl and in along the middle bar to a point at its
+        # end, then back out and round the bottom bowl. The way in and the
+        # way out meet in that point, like a hand-drawn 3 (a round turn there
+        # read as a little loop).
         mid = g.col_mid(0.45, 1)                       # the middle bar
         run = _runs(g.mask[:, int(round(mid[0]))])[1]
         thick = run[1] - run[0]
         s = 0.22 * thick                               # lane offset
-        end_x = g.to_edge(mid, LEFT, 0.0)[0] + 0.3 * thick
+        point = (g.to_edge(mid, LEFT, 0.0)[0] + 0.12 * thick, mid[1])
         # the lanes are level along the bar, and leave it where the bowls'
         # right sides begin (inner edge just above and below the bar)
         inner = min(_runs(g.mask[int(round(y))])[-1][0]
@@ -769,11 +770,10 @@ def _numbers(g, ch):
         bot = g.ridge_route([g.norm([(inner + 0.4 * thick, mid[1] + s)])[0],
                              (0.9, 0.3), (0.5, 0.05), (0.13, 0.22)],
                             head="none", tail="face-up", snap=0.03)
-        turn = [(end_x + s * (1 - math.sin(math.radians(a))), mid[1] - s * math.cos(math.radians(a)))
-                for a in range(0, 181, 15)]            # a small round hairpin
-        path = (top + [(join_x, mid[1] - s)] + turn
-                + [(join_x, mid[1] + s)] + bot)
-        return [poly(even_curve(path, min_gap=3.0, step=3.0, window=3))]
+        # smooth each side on its own, so the point stays sharp
+        way_in = even_curve(top + [(join_x, mid[1] - s)], min_gap=3.0, step=3.0, window=3)
+        way_out = even_curve([(join_x, mid[1] + s)] + bot, min_gap=3.0, step=3.0, window=3)
+        return [poly(way_in + [point] + way_out)]
 
     if ch == "4":
         # slant down from the top to the corner, across the bar; then the
@@ -783,27 +783,52 @@ def _numbers(g, ch):
         corner = g.meet(diag, ((0.0, bar[1]), RIGHT))
         if not g.inside(*corner):
             corner = g.pull_inside(corner, RIGHT, 6)
-        top, bot, _ = g.stem(-1, (0.2, 0.9))
+        # the stem measured where it stands alone: above the counter's top
+        # the row also crosses the slant, which pulled the line left
+        top, bot, _ = g.stem(-1, (0.45, 0.9))
         start = g.to_edge(diag[0], rev(diag[1]))
         return [poly([start, corner, g.to_edge(bar, RIGHT, inset)]), g.seg(top, bot)]
 
     if ch == "5":
         # down the stem and round the belly to the flat end; then the hat,
         # across the top from the stem
-        sx = g.run_mid(0.3, 0)[0]
-        belly = g.ridge_route([(g.nx(sx), 0.92), (0.9, 0.32), (0.5, 0.04), (0.12, 0.2)],
-                              head="none", tail="face-up")
+        # Straight down the stem's middle, a sharp turn onto the belly, then
+        # round it half a stroke in from the outside edge (following the
+        # middle of the ink bent the stem and looped the turn).
+        top, _, sx = g.stem(0, (0.24, 0.3))    # below the hat, above the belly
+        traced = g.ridge_route([(0.6, 0.6), (0.9, 0.32), (0.5, 0.04), (0.12, 0.2)],
+                               head="none", tail="face-up")
+        tail = traced[-1]                    # the middle of the flat end
+        half = _stroke_half(g, traced)
+        belly_top = g.col_mid(0.55, 1)       # hat, belly top, belly bottom
+        stem_edge = float(_runs(g.mask[int(round(g.t + 0.3 * g.h))])[0][1])
+        # The corner: the middle of the belly's top band just right of the
+        # stem (measured on a column there), so the turn runs level along
+        # the band's middle and straight into the belly line.
+        band = _runs(g.mask[:, int(round(stem_edge + 0.4 * half))])[1]
+        corner_y = (band[0] + band[1]) / 2.0
+        edge = _edge_loop(g, half, (stem_edge + 1.2 * half, corner_y),
+                          (g.r - half, g.t + 0.65 * g.h))
+        belly = _to_flat_end(edge, traced, half)
         hat = g.col_mid(0.7, 0)
-        return [poly([(sx, float(g.t) + 0.5)] + belly),
+        return [poly([top, (sx, corner_y)] + belly),
                 g.seg((sx, hat[1]), g.to_edge(hat, RIGHT, inset))]
 
     if ch == "6":
         # from the flat end at the upper right, curve down the left side,
         # round the bottom and up over the loop, stopping where it meets the
         # left side again
-        path = g.ridge_route([(0.82, 0.8), (0.12, 0.5), (0.5, 0.04), (0.88, 0.3),
-                              (0.55, 0.58)], head="face-down", tail="none")
-        return [poly(_stop_short(g, path, 0.06))]
+        # Half a stroke in from the outside edge all the way round (the middle
+        # of the ink dented inward where the loop joins the left side).
+        traced = g.ridge_route([(0.82, 0.8), (0.12, 0.5), (0.5, 0.04), (0.88, 0.3),
+                                (0.55, 0.58)], head="face-down", tail="none")
+        start = traced[0]                    # the middle of the flat end
+        half = _stroke_half(g, traced)
+        edge = _stop_short(g, _edge_loop(g, half, start, (g.l + half, g.t + 0.5 * g.h)), 0.06)
+        # begin on the middle of the flat end: the same blend, run backwards
+        head = traced[: len(traced) // 4]
+        path = _to_flat_end(edge[::-1], head[::-1], half)[::-1]
+        return [poly(path)]
 
     if ch == "7":
         # across the top, then a hard turn and slant down to the foot
@@ -830,27 +855,108 @@ def _numbers(g, ch):
     if ch == "9":
         # circle back round the loop; then from the top of the loop, down the
         # right side and round to the flat end at the lower left
+        # The way down keeps half a stroke in from the outside edge, so it
+        # doesn't dent inward where the loop joins the right side.
         outside, counters = g.regions()
         right = np.nonzero(counters[0])[1].max()
         ring = _bowl_ring(g, right, "right")
-        down = g.ridge_route([ring[0], (0.9, 0.45), (0.5, 0.04), (0.13, 0.2)],
-                             head="none", tail="face-up")
-        return [("poly", ring), poly(down)]
+        top = (g.l + ring[0][0] * g.w, g.b - ring[0][1] * g.h)
+        traced = g.ridge_route([ring[0], (0.9, 0.45), (0.5, 0.04), (0.13, 0.2)],
+                               head="none", tail="face-up")
+        half = _stroke_half(g, traced)
+        edge = _edge_loop(g, half, top, (g.r - half, g.t + 0.6 * g.h))
+        return [("poly", ring), poly([top] + _to_flat_end(edge, traced, half)[1:])]
 
     raise KeyError(ch)
 
 
+def _stroke_half(g, path_px):
+    """Half the stroke width, from the ink's thickness along a traced path
+    (the median ignores the thick places where strokes merge)."""
+    dt = g.dist()
+    return float(np.median([dt[int(round(y)), int(round(x))] for x, y in path_px]))
+
+
+def _edge_loop(g, half, start, via):
+    """The line `half` px in from the letter's OUTSIDE edge, all the way
+    round, beginning nearest `start` (pixels) and heading the way that
+    passes `via` first.
+
+    This is where a pen of one stroke's width runs. Where two strokes merge
+    into a thick patch (6's left side where its loop joins, 9's right side,
+    5's belly), the middle of the ink swings over into the patch and the
+    dotted line dented inward there; a line kept half a stroke in from the
+    outside edge stays as smooth as the edge itself. Counters (the holes)
+    are ignored, so it follows the outside only."""
+    import cv2
+    # Walk in from each point of the outside edge, square to it, by `half`
+    # px, but never past the middle of the ink: where a stroke is thinner
+    # than a full stroke (near a flat end) that keeps the line on its
+    # middle. (A line at a fixed distance from the edge broke apart there.)
+    cs, _ = cv2.findContours(g.mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    edge = max(cs, key=cv2.contourArea)[:, 0, :].astype(float)
+    dt = g.dist()
+    m, win = len(edge), 6
+    loop = []
+    for i in range(m):
+        tx, ty = edge[(i + win) % m] - edge[(i - win) % m]
+        L = math.hypot(tx, ty) or 1.0
+        nx_, ny_ = -ty / L, tx / L
+        x, y = edge[i]
+        if not g.inside(x + 3 * nx_, y + 3 * ny_):
+            nx_, ny_ = -nx_, -ny_                 # point the normal inward
+        t, best = 0.0, 0.0
+        while t < half:
+            t += 0.5
+            px, py = x + nx_ * t, y + ny_ * t
+            v = dt[int(round(py)), int(round(px))] if g.inside(px, py) else 0.0
+            if v < best - 0.5:
+                t -= 0.5
+                break                             # past the middle of the ink
+            best = max(best, v)
+        loop.append((x + nx_ * t, y + ny_ * t))
+    loop = np.array(loop)
+    n = len(loop)
+
+    def near(p):
+        return int(np.argmin(np.hypot(loop[:, 0] - p[0], loop[:, 1] - p[1])))
+    i0, iv = near(start), near(via)
+    step = 1 if (iv - i0) % n < n / 2 else -1
+    pts = [tuple(loop[(i0 + step * k) % n]) for k in range(n)]
+    return even_curve(pts, min_gap=3.0, step=3.0, window=6)
+
+
+def _nearest(path, p):
+    return min(range(len(path)), key=lambda i: math.hypot(path[i][0] - p[0], path[i][1] - p[1]))
+
+
+def _to_flat_end(edge, traced, half):
+    """Follow `edge` (the half-stroke-in line) until it comes within a
+    stroke and a half of where `traced` ends, then finish along `traced`,
+    which lands square on the middle of the flat end. (The edge line runs
+    round the corners of the cut there.)"""
+    end = traced[-1]
+    # Up to the edge line's closest point to the end, then back from there
+    # to where it is a stroke and a half away. (Searching forward from the
+    # start stopped too early on 6, whose loop passes close to its flat end.)
+    edge = edge[:_nearest(edge, end) + 1]
+    k = len(edge) - 1
+    while k > 0 and math.hypot(edge[k][0] - end[0], edge[k][1] - end[1]) < 3.0 * half:
+        k -= 1
+    j = _nearest(traced, edge[k])
+    return even_curve(edge[:k] + traced[j:], min_gap=3.0, step=3.0, window=4)
+
+
 def _stop_short(g, path, frac_of_cap):
-    """Cut the end of a path that runs back into ink it crossed near its
-    start (6's loop meeting its own left side), this far short of it. Only
-    the last third is checked against the first third, so the path's own
+    """Cut the end of a path that runs back into ink it crossed earlier (6's
+    loop meeting its own left side), this far short of it. Each point is
+    only checked against points well behind it along the path, so its own
     neighbours never count."""
     gap = frac_of_cap * g.cap_px
-    n = len(path)
-    early = path[: n // 3]
-    for i in range(2 * n // 3, n):
+    behind = int(0.8 * g.cap_px / 3.0)       # path points are about 3 px apart
+    for i in range(behind + 1, len(path)):
         x, y = path[i]
-        if min(math.hypot(x - a, y - b) for a, b in early) < gap:
+        if min(math.hypot(x - a, y - b) for a, b in path[:i - behind]) < gap:
             return path[:i]
     return path
 

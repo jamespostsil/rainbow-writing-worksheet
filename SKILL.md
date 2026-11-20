@@ -113,10 +113,15 @@ phrases are first drafts: say so when handing pages over.
 - **Every number is the same size** on one baseline; 10 is one piece
   (its 1 and 0 measured separately and moved into place).
 - **Strokes:** standard preschool print order. One stroke where the pen
-  doesn't lift (2, 3, 6, 7, 8), two where it does (4, 5, 9, 10). 3's
-  middle bar is travelled in and back out, so it has two lanes like B's
-  waist; 8 crosses itself in an X at the waist; 6 stops where its loop
-  meets its own side; 9 is "circle back, then down" like lowercase a.
+  doesn't lift (2, 3, 6, 7, 8), two where it does (4, 5, 9, 10). 3 goes
+  in along its middle bar and back out, the two lines meeting in a point
+  (not a round turn); 8 crosses itself in an X at the waist; 6 stops where
+  its loop meets its own side; 9 is "circle back, then down" like
+  lowercase a; 5 goes straight down, then turns sharply onto the belly.
+- **Curves through thick joins stay smooth** (6, 9, 5's belly): they run
+  half a stroke in from the outside edge, not along the middle of the
+  ink, which dents inward where two strokes merge. Look for dents and
+  bends on every number at 3x; the checker doesn't catch them.
 - **Things to count** and cues are in the `LETTERS` table (keys "0" to
   "10"): `(OpenMoji codepoint, how many)`. Pick things that are easy to
   count apart at about half an inch: simple outlines, no fine detail.
