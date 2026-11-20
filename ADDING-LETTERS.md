@@ -140,6 +140,15 @@ Ten are built: **a b c d e i l o t n.** Their branches are in `_lowercase()` in 
 
 **Use a small `snap` for marks.** `ridge_route` first moves each waypoint to the thickest ink nearby. The default search radius is 5% of the cap height. Near the cedilla, the thickest ink nearby is the C itself, so the waypoint jumped into the C. The tilde and cedilla use `snap=0.01`.
 
+### Numbers
+
+0 to 10 are built, in `_numbers()` in `letterform.py`. They share one size and baseline (`NUM_TOP`/`NUM_BOTTOM` in `make_rainbow.py`). New tools there:
+
+- **Two characters as one piece (10):** `Glyph("10")` measures the pair. Each digit's strokes come from its own glyph and are moved into place with `rebase(..., around=advance)`, because the 0 sits one advance width to the right. Poppins doesn't kern 1-0, so the PDF and the mask agree. Pass items with commas (`verify.py "9,10"`) so 10 stays whole.
+- **A bar travelled out and back (3):** the bar part is built as two level lanes, 0.22 of the bar's thickness above and below its middle, joined by a small round turn near the bar's end. Letting `ridge_route` run both ways put the two passes on top of each other, and shifting the traced path afterwards came out as a jagged step.
+- **A figure eight (8):** `_ring_loops()` gives each loop's centre line (with lanes at the shared waist, like B), and `_ring_arc()` takes the part between two angles. The stroke goes round the top loop, through an X in the waist, all the way round the bottom loop, back through the X and up the top loop. `ridge_route` through the waist ran both passes along the same line.
+- **A stroke that meets itself (6):** `_stop_short()` ends the loop just before it reaches the side it started down. The first try compared against the whole first half of the path and cut the 6 off halfway down.
+
 **The page sizes these letters for you.** A character that goes below the baseline or above the cap height is made smaller until the whole thing fits (Q, Ñ, Ç, Ü, Å, Ž, É). Other letters keep the full 6.19 inch cap height.
 
 ## Step 3: test the strokes

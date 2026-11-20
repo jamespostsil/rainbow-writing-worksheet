@@ -168,7 +168,23 @@ LETTERS = {
     "n": ("nose", 0x1F443, "down, then over the hump and down"),
     "o": ("octopus", 0x1F419, "circle all the way around"),
     "t": ("turtle", 0x1F422, "down and curve, then across"),
+    # Numbers (English). Not in the default alphabet: ask for them with
+    # --numbers. The picture is (OpenMoji codepoint, how many) to count, shown
+    # beside the number's own character (assets/pictures/numbers/<n>.png)
+    # when there is one; the caption is the keyword itself.
+    "0": ("zero", None, "curve all the way around"),
+    "1": ("one sun", (0x2600, 1), "across, then straight down"),
+    "2": ("two cats", (0x1F431, 2), "curve around, slant down, across"),
+    "3": ("three ducks", (0x1F986, 3), "around, in to the middle, around again"),
+    "4": ("four fish", (0x1F41F, 4), "slant down, across, then down"),
+    "5": ("five stars", (0x2B50, 5), "down, around, then across the top"),
+    "6": ("six apples", (0x1F34E, 6), "curve down and around the loop"),
+    "7": ("seven ladybugs", (0x1F41E, 7), "across, then slant down"),
+    "8": ("eight balloons", (0x1F388, 8), "make an S, then go back up"),
+    "9": ("nine flowers", (0x1F33C, 9), "circle back around, then down"),
+    "10": ("ten chicks", (0x1F424, 10), "straight down, then curve all the way around"),
 }
+NUMBERS = [str(n) for n in range(11)]
 
 
 def page_text(ch):
@@ -178,8 +194,26 @@ def page_text(ch):
 
 # --------------------------------------------------------------------------
 def letter_bbox(ch):
-    g = _lglyf[_lcmap[ord(ch)]]
-    return (g.xMin / _lupm, g.yMin / _lupm, g.xMax / _lupm, g.yMax / _lupm)
+    """Ink box (em units) of a character, or of a run of them ("10")
+    laid out by advance width. (Poppins doesn't kern 1-0.)"""
+    x, box = 0.0, None
+    for c in ch:
+        gid = _lcmap[ord(c)]
+        g = _lglyf[gid]
+        b = ((x + g.xMin) / _lupm, g.yMin / _lupm, (x + g.xMax) / _lupm, g.yMax / _lupm)
+        box = b if box is None else (min(box[0], b[0]), min(box[1], b[1]),
+                                     max(box[2], b[2]), max(box[3], b[3]))
+        x += _lf["hmtx"][gid][0]
+    return box
+
+
+def is_number(ch):
+    return ch.isdigit()
+
+
+# Every number is drawn at the same size, on the same baseline: top of the
+# tallest digit (0.747 em) down to the lowest (8 dips to -0.014 em).
+NUM_TOP, NUM_BOTTOM = 0.75, -0.016
 
 
 def pic_bbox(cp):
@@ -231,6 +265,10 @@ def draw_letter(c, ch):
         # on ruled paper, with room kept for i's dot and for descenders.
         size = box_h / (LOWER_TOP - LOWER_BOTTOM)
         y = BOX_BOTTOM - LOWER_BOTTOM * size
+    elif is_number(ch):
+        # one size for every number (10 is shrunk only if too wide)
+        size = min(by_width, box_h / (NUM_TOP - NUM_BOTTOM))
+        y = BOX_BOTTOM + (box_h - (NUM_TOP - NUM_BOTTOM) * size) / 2 - NUM_BOTTOM * size
     elif gy0 < -0.02 or gy1 > CAP_RATIO + 0.03:
         size = min(by_width, box_h / (gy1 - gy0))
         y = BOX_BOTTOM + (box_h - (gy1 - gy0) * size) / 2 - gy0 * size
@@ -564,10 +602,99 @@ def draw_xylophone(c, cx, cy):
 DRAWINGS.update({"xylophone": draw_xylophone, "sweet_potato": draw_sweet_potato})
 
 
+# Counting pictures (number pages) get the whole strip right of the rainbow,
+# not just the letter pages' corner: seven or ten things need the room.
+COUNT_CX, COUNT_CY = 452, 140
+COUNT_W, COUNT_H = 270, 112
+COUNT_ROWS = {1: [1], 2: [2], 3: [3], 4: [2, 2], 5: [3, 2], 6: [3, 3],
+              7: [4, 3], 8: [4, 4], 9: [5, 4], 10: [5, 5]}
+
+
+def draw_count(c, cx, cy, cp, n, box_w=COUNT_W, box_h=COUNT_H):
+    """`n` of the same OpenMoji picture in neat rows, for counting. Every copy
+    gets the same size, so none looks like the odd one out."""
+    rows = COUNT_ROWS[n]
+    x0, y0, x1, y1 = pic_bbox(cp)
+    # Each copy fits its own cell by width AND height (a wide fish fills a
+    # wide cell), then the copies are packed with a small gap, not spread
+    # across the cell, so a row reads as one group.
+    cell_w, cell_h = box_w / max(rows), box_h / len(rows)
+    size = min(0.86 * cell_w / (x1 - x0), 0.86 * cell_h / (y1 - y0), 0.9 * box_h / (y1 - y0))
+    pitch_x = min(cell_w, (x1 - x0) * size + 8)
+    pitch_y = min(cell_h, (y1 - y0) * size + 8)
+    ink = [math.inf, math.inf, -math.inf, -math.inf]
+    for r, count in enumerate(rows):
+        py = cy + (len(rows) / 2 - r - 0.5) * pitch_y
+        for k in range(count):
+            px = cx + (k - (count - 1) / 2) * pitch_x
+            gx = px - (x0 + x1) / 2 * size
+            gy = py - (y0 + y1) / 2 * size
+            text_at(c, gx, gy, chr(cp), "Pic", size, LINE)
+            ink = [min(ink[0], gx + x0 * size), min(ink[1], gy + y0 * size),
+                   max(ink[2], gx + x1 * size), max(ink[3], gy + y1 * size)]
+    return tuple(ink)
+
+
+CHARACTER_W = 84      # a number's character, beside the things to count
+
+
+def character_png(ch):
+    """The number's own cartoon character (a Canva line drawing), if made."""
+    path = os.path.join(PICTURES, "numbers", ch + ".png")
+    return path if os.path.exists(path) else None
+
+
+def draw_image(c, path, cx, cy, w, h):
+    """A black-on-white drawing, pasted in as an image with its black turned
+    to the same grey as every other line on the page. (Tracing it to lines
+    like the sweet potato dropped the number characters' mouths and eyes.)"""
+    from PIL import Image, ImageOps
+    from reportlab.lib.utils import ImageReader
+    grey = Image.open(path).convert("L")
+    line = tuple(int(round(v * 255)) for v in (LINE.red, LINE.green, LINE.blue))
+    img = ImageReader(ImageOps.colorize(grey, black=line, white=(255, 255, 255)))
+    iw, ih = img.getSize()
+    s = min(w / iw, h / ih)
+    dw, dh = iw * s, ih * s
+    c.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh, mask="auto")
+    return (cx - dw / 2, cy - dh / 2, cx + dw / 2, cy + dh / 2)
+
+
+def draw_number_picture(c, ch):
+    """The number's character on the left of the strip, with that many
+    things to count beside it. Without a character, the things fill the
+    strip; 0 has no things, so its character sits alone."""
+    pic = LETTERS[ch][1]
+    face = character_png(ch)
+    boxes = []
+    if pic is None:
+        if face:
+            boxes.append(draw_image(c, face, COUNT_CX, COUNT_CY, 150, COUNT_H))
+    elif face:
+        left = COUNT_CX - COUNT_W / 2
+        boxes.append(draw_image(c, face, left + CHARACTER_W / 2, COUNT_CY, CHARACTER_W, COUNT_H))
+        rest = COUNT_W - CHARACTER_W - 10
+        boxes.append(draw_count(c, left + CHARACTER_W + 10 + rest / 2, COUNT_CY, *pic,
+                                box_w=rest, box_h=COUNT_H))
+    else:
+        boxes.append(draw_count(c, COUNT_CX, COUNT_CY, *pic))
+    if not boxes:          # nothing drawn: an empty box where the picture goes
+        return (COUNT_CX, COUNT_CY, COUNT_CX, COUNT_CY)
+    return (min(b[0] for b in boxes), min(b[1] for b in boxes),
+            max(b[2] for b in boxes), max(b[3] for b in boxes))
+
+
+def picture_cx(ch):
+    return COUNT_CX if is_number(ch) else PIC_CX
+
+
 def draw_picture(c, ch):
     """Line drawing of something that starts with the letter, and its caption."""
     keyword, pic = LETTERS[ch][:2]
-    if pic in DRAWINGS:
+    cx = picture_cx(ch)
+    if is_number(ch):
+        ink = draw_number_picture(c, ch)
+    elif pic in DRAWINGS:
         ink = DRAWINGS[pic](c, PIC_CX, PIC_CY)
     else:
         x0, y0, x1, y1 = pic_bbox(pic)
@@ -578,10 +705,13 @@ def draw_picture(c, ch):
         text_at(c, gx, gy, chr(pic), "Pic", size, LINE)
         ink = (gx + x0 * size, gy + y0 * size, gx + x1 * size, gy + y1 * size)
 
-    label = page_text(ch)["is_for"].format(L=ch, word=keyword)
+    if is_number(ch):
+        label = keyword                   # "three ducks"
+    else:
+        label = page_text(ch)["is_for"].format(L=ch, word=keyword)
     lw = pdfmetrics.stringWidth(label, "Poppins", CAPTION_SIZE)
-    text_at(c, PIC_CX - lw / 2, CAPTION_Y, label, "Poppins", CAPTION_SIZE, INK)
-    caption = (PIC_CX - lw / 2, CAPTION_Y - 4, PIC_CX + lw / 2, CAPTION_Y + 12.5)
+    text_at(c, cx - lw / 2, CAPTION_Y, label, "Poppins", CAPTION_SIZE, INK)
+    caption = (cx - lw / 2, CAPTION_Y - 4, cx + lw / 2, CAPTION_Y + 12.5)
     return ink, caption
 
 
@@ -724,14 +854,17 @@ def draw_page(c, ch, title, page_no, total):
     issues = check_page(ch, strokes, letter_ink, hit, CAP_RATIO * size, pic_ink,
                         caption, rain, cloud)
     issues += [f"instruction line too wide for the page: {s!r}" for s in too_wide]
-    if caption[0] < PIC_CX - 110 or caption[2] > W - 18:
+    if caption[0] < max(picture_cx(ch) - 150, rain[2] + 8) or caption[2] > W - 18:
         issues.append("caption too wide for its spot")
     return size, issues
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--letters", default="ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    ap.add_argument("--letters", default=None,
+                    help="letters, e.g. ABC (default A-Z, unless --numbers is given)")
+    ap.add_argument("--numbers", default=None,
+                    help="numbers 0-10: a range like 0-10 or a list like 3,5,10")
     ap.add_argument("--out", default="Rainbow Writing.pdf")
     ap.add_argument("--title", default=None,
                     help="heading for every page (default: 'Rainbow writing' in each page's language)")
@@ -739,7 +872,15 @@ def main():
 
     # A lowercase letter with its own entry stays lowercase (a, b, c...);
     # any other is read as its capital (ñ asks for Ñ).
-    asked = [ch if ch in LETTERS else ch.upper() for ch in args.letters]
+    letters_arg = args.letters if args.letters is not None else (
+        "" if args.numbers else "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    asked = [ch if ch in LETTERS else ch.upper() for ch in letters_arg]
+    for part in (args.numbers or "").replace(" ", ",").split(","):
+        if "-" in part:
+            lo, hi = part.split("-")
+            asked += [str(n) for n in range(int(lo), int(hi) + 1)]
+        elif part:
+            asked.append(part)
     letters = [ch for ch in asked if ch in LETTERS]
     skipped = sorted(set(ch for ch in asked if ch not in LETTERS and not ch.isspace()))
     if skipped:
@@ -747,6 +888,9 @@ def main():
     c = canvas.Canvas(args.out, pagesize=LETTER)
     c.setTitle(args.title or PAGE_TEXT["en"]["title"])
     problems = 0
+    no_face = [ch for ch in letters if is_number(ch) and not character_png(ch)]
+    if no_face:
+        print(f"  no character picture yet (assets/pictures/numbers/<n>.png): {' '.join(no_face)}")
     for i, ch in enumerate(letters, start=1):
         size, issues = draw_page(c, ch, args.title, i, len(letters))
         c.showPage()

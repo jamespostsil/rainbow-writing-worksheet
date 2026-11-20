@@ -74,11 +74,21 @@ _CMAP = None
 
 
 def in_font(ch):
+    """Every character of `ch` is in the font. (`ch` can be more than one
+    character: "10" is drawn as one piece.)"""
     global _CMAP
     if _CMAP is None:
         from fontTools.ttLib import TTFont
         _CMAP = TTFont(FONT_PATH).getBestCmap()
-    return ord(ch) in _CMAP
+    return all(ord(c) in _CMAP for c in ch)
+
+
+def split_letters(s):
+    """'ABC' -> A, B, C. With commas or spaces, each piece is one item, so a
+    two-digit number stays whole: '0,1,10' or '8 9 10'."""
+    if "," in s or " " in s:
+        return [p for p in s.replace(",", " ").split() if p]
+    return list(s)
 
 
 class Glyph:
@@ -86,7 +96,8 @@ class Glyph:
         # A missing character still renders: as the font's empty "missing
         # glyph" box, which would be measured as if it were the letter.
         if not in_font(ch):
-            raise ValueError(f"{ch!r} (U+{ord(ch):04X}) is not in {os.path.basename(FONT_PATH)}")
+            codes = " ".join(f"U+{ord(c):04X}" for c in ch)
+            raise ValueError(f"{ch!r} ({codes}) is not in {os.path.basename(FONT_PATH)}")
         font = ImageFont.truetype(FONT_PATH, RENDER_PX)
         img = Image.new("L", (RENDER_PX * 2, RENDER_PX * 2), 0)
         ImageDraw.Draw(img).text((RENDER_PX // 2, RENDER_PX // 2), ch, font=font, fill=255)
@@ -440,11 +451,12 @@ class Glyph:
         counters.sort(key=lambda m: np.nonzero(m)[0].mean())
         return outside, counters
 
-    def offset_to(self, base, reach=90):
+    def offset_to(self, base, reach=90, around=0):
         """How far (px) the base letter sits shifted sideways inside this
-        character. Usually 0; Ł moves its L right to make room for the bar."""
-        best, best_dx = -1, 0
-        for dx in range(-reach, reach + 1):
+        character. Usually 0; Ł moves its L right to make room for the bar.
+        `around`: where to look (10's 0 sits one advance width along)."""
+        best, best_dx = -1, around
+        for dx in range(around - reach, around + reach + 1):
             score = int((self.mask & np.roll(base.mask, dx, axis=1)).sum())
             if score > best:
                 best, best_dx = score, dx
@@ -510,11 +522,12 @@ class Glyph:
         return [(self.nx(x), self.ny(y)) for x, y in full]
 
 
-def rebase(strokes, src, dst):
+def rebase(strokes, src, dst, around=0):
     """Move strokes measured on one glyph (N) into another glyph's box (Ñ).
     Both are rendered at the same origin, so pixels line up, except where
-    the font shifts the base sideways (Ł): that offset is measured."""
-    dx = dst.offset_to(src)
+    the font shifts the base sideways (Ł), or the base is the second of two
+    characters (10's 0, one advance width along): that offset is measured."""
+    dx = dst.offset_to(src, reach=90 if not around else 6, around=around)
 
     def p(nx, ny):
         return dst.nx(src.l + nx * src.w + dx), dst.ny(src.b - ny * src.h)
@@ -693,12 +706,200 @@ def _lowercase(g, ch):
     raise KeyError(ch)
 
 
+def _numbers(g, ch):
+    """Strokes for 0-10, in the order and direction preschool print teaches
+    them (start at the top; one stroke where the pen doesn't lift)."""
+    DOWN, LEFT, RIGHT = (0, 1), (-1, 0), (1, 0)
+    inset = 0.04 * g.w
+
+    def rev(d):
+        return (-d[0], -d[1])
+
+    def poly(pts):
+        return ("poly", g.norm(pts))
+
+    if ch == "10":
+        # the 1, then the 0, each measured on its own and moved into place.
+        # Poppins doesn't kern 1-0, so the 0 sits one advance width along.
+        from PIL import ImageFont
+        adv = int(round(ImageFont.truetype(FONT_PATH, RENDER_PX).getlength("1")))
+        return (rebase(strokes_for("1"), Glyph("1"), g)
+                + rebase(strokes_for("0"), Glyph("0"), g, around=adv))
+
+    if ch == "0":
+        # like O: from the top, counter-clockwise all the way round
+        return strokes_for("O", glyph=g)
+
+    if ch == "1":
+        # along the flag to the top of the stem, then straight down
+        top, bot, sx = g.stem(0, (0.5, 0.9))
+        flag = g.col_mid(0.04, 0)
+        return [poly([g.to_edge(flag, LEFT), (sx, flag[1]), bot])]
+
+    if ch == "2":
+        # from the flat end at the upper left, over the top and round, slant
+        # down to the corner, then a hard turn along the base
+        bar_y = g.col_mid(0.5, -1)[1]
+        diag = g.line(g.run_mid(0.55, 0), g.run_mid(0.68, 0))
+        corner = g.meet(diag, ((0.0, bar_y), RIGHT))
+        if not g.inside(*corner):
+            corner = g.pull_inside(corner, RIGHT, 6)
+        curve = g.ridge_route([(0.16, 0.74), (0.5, 0.93), (0.86, 0.68),
+                               g.norm([g.run_mid(0.55, 0)])[0]],
+                              head="face-down", tail="none")
+        return [poly(curve + [corner, g.to_edge((corner[0], bar_y), RIGHT, inset)])]
+
+    if ch == "3":
+        # round the top bowl and in along the middle bar to its end, then
+        # back out and round the bottom bowl. The bar is travelled twice, so
+        # the way in and the way out each get their own lane (like B's waist)
+        mid = g.col_mid(0.45, 1)                       # the middle bar
+        run = _runs(g.mask[:, int(round(mid[0]))])[1]
+        thick = run[1] - run[0]
+        s = 0.22 * thick                               # lane offset
+        end_x = g.to_edge(mid, LEFT, 0.0)[0] + 0.3 * thick
+        # the lanes are level along the bar, and leave it where the bowls'
+        # right sides begin (inner edge just above and below the bar)
+        inner = min(_runs(g.mask[int(round(y))])[-1][0]
+                    for y in (run[0] - 0.6 * thick, run[1] + 0.6 * thick))
+        join_x = inner - 0.2 * thick
+        top = g.ridge_route([(0.14, 0.76), (0.5, 0.94), (0.86, 0.74),
+                             g.norm([(inner + 0.4 * thick, mid[1] - s)])[0]],
+                            head="face-down", tail="none", snap=0.03)
+        bot = g.ridge_route([g.norm([(inner + 0.4 * thick, mid[1] + s)])[0],
+                             (0.9, 0.3), (0.5, 0.05), (0.13, 0.22)],
+                            head="none", tail="face-up", snap=0.03)
+        turn = [(end_x + s * (1 - math.sin(math.radians(a))), mid[1] - s * math.cos(math.radians(a)))
+                for a in range(0, 181, 15)]            # a small round hairpin
+        path = (top + [(join_x, mid[1] - s)] + turn
+                + [(join_x, mid[1] + s)] + bot)
+        return [poly(even_curve(path, min_gap=3.0, step=3.0, window=3))]
+
+    if ch == "4":
+        # slant down from the top to the corner, across the bar; then the
+        # stem straight down, crossing the bar
+        diag = g.line(g.run_mid(0.3, 0), g.run_mid(0.5, 0))
+        bar = g.col_mid(0.05, 0)
+        corner = g.meet(diag, ((0.0, bar[1]), RIGHT))
+        if not g.inside(*corner):
+            corner = g.pull_inside(corner, RIGHT, 6)
+        top, bot, _ = g.stem(-1, (0.2, 0.9))
+        start = g.to_edge(diag[0], rev(diag[1]))
+        return [poly([start, corner, g.to_edge(bar, RIGHT, inset)]), g.seg(top, bot)]
+
+    if ch == "5":
+        # down the stem and round the belly to the flat end; then the hat,
+        # across the top from the stem
+        sx = g.run_mid(0.3, 0)[0]
+        belly = g.ridge_route([(g.nx(sx), 0.92), (0.9, 0.32), (0.5, 0.04), (0.12, 0.2)],
+                              head="none", tail="face-up")
+        hat = g.col_mid(0.7, 0)
+        return [poly([(sx, float(g.t) + 0.5)] + belly),
+                g.seg((sx, hat[1]), g.to_edge(hat, RIGHT, inset))]
+
+    if ch == "6":
+        # from the flat end at the upper right, curve down the left side,
+        # round the bottom and up over the loop, stopping where it meets the
+        # left side again
+        path = g.ridge_route([(0.82, 0.8), (0.12, 0.5), (0.5, 0.04), (0.88, 0.3),
+                              (0.55, 0.58)], head="face-down", tail="none")
+        return [poly(_stop_short(g, path, 0.06))]
+
+    if ch == "7":
+        # across the top, then a hard turn and slant down to the foot
+        bar = g.line(g.col_mid(0.2, 0), g.col_mid(0.6, 0))
+        diag = g.line(g.run_mid(0.45, 0), g.run_mid(0.85, 0))
+        corner = g.meet(bar, diag)
+        if not g.inside(*corner):
+            corner = g.pull_inside(corner, LEFT, 6)
+        return [poly([g.to_edge(bar[0], rev(bar[1])), corner, g.to_edge(diag[0], diag[1])])]
+
+    if ch == "8":
+        # an S, then back up: from the top, round the left of the top loop,
+        # across the waist, round the right and bottom of the lower loop, back
+        # across the waist and up the right of the top loop to the start
+        # Each loop's own centre line, joined by two straight crossings
+        # that make an X in the waist (the top loop's lower left to the
+        # bottom loop's upper right, and back).
+        (top, tc), (low, lc) = _ring_loops(g)
+        path = (_ring_arc(top, tc, 80, 225)              # over the top, down the left
+                + _ring_arc(low, lc, 45, -225)           # round the bottom, clockwise
+                + _ring_arc(top, tc, -45, 70))           # up the right to the start
+        return [poly(even_curve(path, min_gap=4.0, step=3.0, window=5))]
+
+    if ch == "9":
+        # circle back round the loop; then from the top of the loop, down the
+        # right side and round to the flat end at the lower left
+        outside, counters = g.regions()
+        right = np.nonzero(counters[0])[1].max()
+        ring = _bowl_ring(g, right, "right")
+        down = g.ridge_route([ring[0], (0.9, 0.45), (0.5, 0.04), (0.13, 0.2)],
+                             head="none", tail="face-up")
+        return [("poly", ring), poly(down)]
+
+    raise KeyError(ch)
+
+
+def _stop_short(g, path, frac_of_cap):
+    """Cut the end of a path that runs back into ink it crossed near its
+    start (6's loop meeting its own left side), this far short of it. Only
+    the last third is checked against the first third, so the path's own
+    neighbours never count."""
+    gap = frac_of_cap * g.cap_px
+    n = len(path)
+    early = path[: n // 3]
+    for i in range(2 * n // 3, n):
+        x, y = path[i]
+        if min(math.hypot(x - a, y - b) for a, b in early) < gap:
+            return path[:i]
+    return path
+
+
+def _ring_loops(g):
+    """Centre line of each ring round a counter (8's two loops), as closed
+    outlines with each counter's centre. Where two rings share ink (8's
+    waist) each gets its own lane, as B's waist does."""
+    import cv2
+
+    def dist_to(region):
+        return cv2.distanceTransform(np.where(region, 0, 255).astype(np.uint8), cv2.DIST_L2, 5)
+
+    outside, counters = g.regions()
+    loops = []
+    for k, cnt in enumerate(counters):
+        others = [dist_to(outside)] + [dist_to(c) * (0.3 / 0.7)
+                                       for j, c in enumerate(counters) if j != k]
+        nearer = (dist_to(cnt) < np.minimum.reduce(others)).astype(np.uint8) * 255
+        cs, _ = cv2.findContours(nearer, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        loop = max(cs, key=cv2.contourArea)[:, 0, :].astype(float)
+        ys, xs = np.nonzero(cnt)
+        loops.append((loop, (float(xs.mean()), float(ys.mean()))))
+    return loops
+
+
+def _ring_arc(loop, centre, a0, a1, step=2.0):
+    """Points of a ring's centre line from angle a0 to a1 (degrees, math
+    convention, about `centre`), in that direction."""
+    cx, cy = centre
+    ang = np.degrees(np.arctan2(-(loop[:, 1] - cy), loop[:, 0] - cx))
+    out = []
+    n = int(abs(a1 - a0) / step)
+    for i in range(n + 1):
+        a = a0 + (a1 - a0) * i / n
+        d = (ang - a + 180.0) % 360.0 - 180.0
+        k = int(np.argmin(np.abs(d)))
+        out.append((float(loop[k, 0]), float(loop[k, 1])))
+    return out
+
+
 def strokes_for(ch, glyph=None):
     """`glyph` lets a lowercase letter borrow an uppercase branch (c, o) while
     measuring its own shape."""
     g = glyph or Glyph(ch)
     if glyph is None and ch.islower():
         return _lowercase(g, ch)
+    if glyph is None and ch.isdigit():
+        return _numbers(g, ch)
 
     if ch in COMPOSED:
         base = Glyph(COMPOSED[ch])

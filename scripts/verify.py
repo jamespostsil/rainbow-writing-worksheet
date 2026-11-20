@@ -12,7 +12,7 @@ import sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from letterform import Glyph, strokes_for, FONT_PATH
+from letterform import Glyph, strokes_for, split_letters, FONT_PATH
 
 
 def to_px(g, kind, data, n=120):
@@ -222,7 +222,7 @@ def sheet(letters, path, cols=6, tile=300):
 
 
 if __name__ == "__main__":
-    letters = sys.argv[1] if len(sys.argv) > 1 else "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    letters = split_letters(sys.argv[1] if len(sys.argv) > 1 else "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
     expected = load_expected()
     new_count = 0
     print(f"{'':3}{'stroke':>7} {'outside':>8} {'lopsided':>9}  {'worst at (x,y)':<16} "

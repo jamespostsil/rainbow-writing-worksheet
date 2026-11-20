@@ -16,3 +16,13 @@ Then add a small drawing function in `make_rainbow.py` that calls `draw_traced(c
 **What makes a good source drawing:** black lines on white, one object, no shading, and lines that don't touch the edge of the image.
 
 The xylophone (X) is drawn directly in code (`draw_xylophone`).
+
+## Number characters (numbers/)
+
+`numbers/0.png` to `numbers/10.png`: one cartoon character per number, shown beside the things to count. Made with Canva's AI image tool on a nonprofit Canva account, from a prompt like:
+
+> A cute cartoon number 3 character with a big happy face, big eyes, small arms and legs and sneakers, waving. Simple black outline coloring-page drawing, white background, no color, no scenery.
+
+(For 10: "the numbers 1 and 0 as two cute friends holding hands".)
+
+These are **pasted in as images**, not traced: tracing dropped their mouths and pupils. The page turns their black lines to the same grey as the other pictures. A number with no file still makes a page; its things to count fill the space.

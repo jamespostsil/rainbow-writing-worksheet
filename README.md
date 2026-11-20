@@ -35,6 +35,16 @@ Besides A to Z, the skill can make **Ñ, Ç, Ü, Å, Ø, Ž, Ł and É**. Each m
 
 To add more letters, see **[ADDING-LETTERS.md](ADDING-LETTERS.md)**.
 
+## Numbers 0 to 10
+
+The skill also makes number pages, 0 to 10. Each has the giant hollow number with numbered strokes, the rainbow, and a cartoon character for that number standing next to that many things to count, with a caption like "three ducks".
+
+```
+python scripts/make_rainbow.py --numbers 0-10 --out numbers.pdf
+```
+
+The characters are drawings in `assets/pictures/numbers/` (`0.png` to `10.png`). If a number has no character yet, its page shows just the things to count.
+
 ## Install
 
 ### In Claude Code
@@ -77,6 +87,7 @@ python scripts/make_rainbow.py --letters ABCDE --out rainbow-writing.pdf
 ```
 
 - **--letters:** the letters to make. The default is A to Z. Ask for the other letters by name, for example `--letters "ÑÇÜÅØŽŁÉ"`.
+- **--numbers:** number pages, as a range (`0-10`) or a list (`3,5,10`). With only `--numbers`, no letters are made.
 - **--title:** replaces the heading on every page. By default it is "Rainbow writing" in each page's language.
 
 The script prints one line per page. Every line should say `ok`.

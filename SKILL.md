@@ -5,9 +5,11 @@ description: >
   one giant hollow capital letter per 8.5x11 page with numbered dotted
   stroke-order guides, a rainbow the child colors one band of after each
   tracing pass, and a friendly line-art picture of something starting with
-  that letter. Use when someone asks for rainbow writing, letter tracing
-  pages, alphabet tracing, or letter-formation practice sheets for
-  preschool/kindergarten, for the whole alphabet or a few letters.
+  that letter. Also numbers 0-10, each with its own cartoon character and
+  that many things to count. Use when someone asks for rainbow writing,
+  letter or number tracing pages, alphabet tracing, or letter/number
+  formation practice sheets for preschool/kindergarten, for the whole
+  alphabet, a few letters, or numbers.
 ---
 
 # Rainbow writing worksheets
@@ -26,6 +28,9 @@ python <SKILL_DIR>/scripts/make_rainbow.py --letters ABCDE --out rainbow-writing
 
 `--letters` defaults to A-Z. `--title` replaces the heading on every page
 (by default it is "Rainbow writing" in each page's language).
+
+Numbers: `--numbers 0-10` (or a list, `--numbers 3,5,10`). With only
+`--numbers`, no letters are made; give both to mix them in one PDF.
 
 Needs `reportlab fonttools numpy pillow opencv-python scikit-image`
 (and `pypdfium2` to render pages for review). All fonts are bundled.
@@ -93,6 +98,30 @@ phrases are first drafts: say so when handing pages over.
 - **Marks are their own strokes, after the base letter**: Ñ's tilde left to
   right, Ç's hook from where it leaves the C, Ü's dots as numbered taps with
   no arrow ("dot" strokes).
+
+## Numbers (0-10)
+
+- **Same page, one difference:** instead of "A is for Apple", the corner
+  strip shows the number's own cartoon character with that many things to
+  count beside it, captioned "three ducks". 0 shows its character alone,
+  captioned "zero".
+- **Characters** are Canva line drawings in `assets/pictures/numbers/<n>.png`
+  (prompt in `assets/pictures/README.md`). A number without one still
+  works: its things fill the strip, and the script prints which are
+  missing. They are pasted as images, tinted to the page's line grey;
+  tracing them to lines dropped their faces.
+- **Every number is the same size** on one baseline; 10 is one piece
+  (its 1 and 0 measured separately and moved into place).
+- **Strokes:** standard preschool print order. One stroke where the pen
+  doesn't lift (2, 3, 6, 7, 8), two where it does (4, 5, 9, 10). 3's
+  middle bar is travelled in and back out, so it has two lanes like B's
+  waist; 8 crosses itself in an X at the waist; 6 stops where its loop
+  meets its own side; 9 is "circle back, then down" like lowercase a.
+- **Things to count** and cues are in the `LETTERS` table (keys "0" to
+  "10"): `(OpenMoji codepoint, how many)`. Pick things that are easy to
+  count apart at about half an inch: simple outlines, no fine detail.
+- Check them with `verify.py "0,1,2,3,4,5,6,7,8,9,10"` (commas keep 10
+  whole).
 
 ## Changing things
 
