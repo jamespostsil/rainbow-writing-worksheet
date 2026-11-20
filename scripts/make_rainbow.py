@@ -651,6 +651,15 @@ def draw_image(c, path, cx, cy, w, h):
     from PIL import Image, ImageOps
     from reportlab.lib.utils import ImageReader
     grey = Image.open(path).convert("L")
+    # Canva's exports sit on a faint off-white that printed as a grey box:
+    # make near-white pure white, then trim the empty margin so the drawing
+    # itself fills its space.
+    grey = grey.point(lambda v: 255 if v > 225 else v)
+    ink = grey.point(lambda v: 255 if v < 200 else 0).getbbox()
+    if ink:
+        pad = 6
+        grey = grey.crop((max(0, ink[0] - pad), max(0, ink[1] - pad),
+                          min(grey.width, ink[2] + pad), min(grey.height, ink[3] + pad)))
     line = tuple(int(round(v * 255)) for v in (LINE.red, LINE.green, LINE.blue))
     img = ImageReader(ImageOps.colorize(grey, black=line, white=(255, 255, 255)))
     iw, ih = img.getSize()
